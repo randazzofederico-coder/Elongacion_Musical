@@ -195,11 +195,14 @@ lib/
 ## 7. KNOWN ISSUES & LIMITATIONS
 - **Specific Audio Glitch (00:08 - 00:10):** [RESOLVED]
   - **Solution:** The artificial "Smart Pacing" logic (`Future.delayed`) was fighting `just_audio`'s internal buffer logic. Removing the pacing and letting the player pull data naturally eliminated the glitch.
-- **Play Head Synchronization:** [ACTIVE]
-  - **Issue:** The visual cursor sometimes drifts or lags behind the audio (approx 200-500ms).
-  - **Cause:** `just_audio.position` reports the time of the *next buffer to be played*, not the *currently hearing* sample.
-  - **Mitigation:** Applied a "Calculated Latency Compensation" (`latencyHint`) to `MixerStreamSource`.
-  - **Status:** Improved but inconsistent. Requires architectural review (Native Timestamp Querying).
+- **Audio Glitch on Pause/Seek:** [RESOLVED]
+  - **Issue:** Audio continued to play or restarted abruptly when pausing, stopping, or seeking.
+  - **Cause:** Miniaudio hardware buffer retained processed frames after device stop, and SoundTouch retained temporal data across seeks.
+  - **Mitigation:** Implemented an internal `_isPlaying` flag in `LiveMixer.cpp` to output explicit silence when paused. Added a 20ms quick fade-in envelope (`_masterEnvelope`) to both `startPlayback()` and `seek()` to eliminate zero-crossing pops and mask any buffer residues. `_mixBuffer` is also explicitly cleared on seek.
+- **Play Head Synchronization:** [RESOLVED]
+  - **Issue:** The visual cursor skipped, lagged, or drifted when seeking or pausing.
+  - **Cause:** `MixerStreamSource` was buffering asynchronously. When paused, the stream stopped updating natively but the UI relied on stale `just_audio` events.
+  - **Mitigation:** Changed `AudioManager.seek()` to target the Native Engine directly. Added a high-frequency `Ticker` to `WaveformSeekBar` that polls the exact atomic hardware position (`MixerProvider.currentPosition`). Visual state now snaps instantly and tracks perfectly.
 - **Phase Vocoder CPU Stalling (Crackling):** [RESOLVED]
   - **Issue:** Severe audio dropouts, silence, and "chisporroteos" when time-stretching is active on mobile.
   - **Cause:** The custom Transient-Preserving Phase Vocoder, or unoptimized C++ builds, caused CPU starvation.

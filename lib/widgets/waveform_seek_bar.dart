@@ -77,42 +77,14 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
   void didUpdateWidget(WaveformSeekBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // Check if we should be ticking
-    // We can't easily check isPlaying from widget props accurately if it comes from stream?
-    // Actually we don't have isPlaying prop here.
-    // But we have context.read in _onTick.
-    // The issue is starting/stopping the ticker.
-    
-    // Let's check context.read<MixerProvider>().isPlaying ? 
-    // But didUpdateWidget doesn't rebuild on provider change unless we listen.
-    // The parent (TransportSection) DOES listen/rebuild. 
-    // IF we pass isPlaying to WaveformSeekBar, we can control ticker efficiently.
-    // The user reverted `isPlaying` prop in my previous revert.
-    
-    // For now, let's just always run ticker if mounted? 
-    // Or add `isPlaying` back to WaveformSeekBar?
-    
-    // The user said "Lets go back to previos state".
-    // I reverted to state WITHOUT isPlaying.
-    // But to get 60fps smoothing, I really should control the Ticker.
-    
-    // If I don't adds `isPlaying`, I can just rely on the parent rebuilding us?
-    // No, `WaveformSeekBar` is a StatefulWidget.
-    
-    // Let's modify `TransportSection` to pass `isPlaying` again? 
-    // It's cleaner.
-    // But failing that, we can listen to the stream?
-    
-    // Actually, `WaveformSeekBar` takes `position`.
-    // If the stream is updating (even slowly), we are getting updates.
-    // We want to ignore the slow stream updates for rendering and use the fast ticker updates.
-    
-    // Wait, if I use Ticker, I don't need `widget.position` for the playhead (except initial sync).
-    // I will use `_visualPosition` which I poll from `MixerProvider` (via context is a bit dirty inside a widget, but ok).
-    
-    // Crucially: When is the Ticker active?
-    // I'll add `isPlaying` to `WaveformSeekBar` construction in `TransportSection`.
-    // It's a tiny change that enables the "Engine" of the UI.
+    // If position changed from parent (e.g. seek while paused) and we aren't dragging,
+    // update our visual position to match.
+    if (widget.position != oldWidget.position && _dragPosition == null) {
+        final mixer = context.read<MixerProvider>();
+        if (!mixer.isPlaying) {
+            _visualPosition = widget.position;
+        }
+    }
   }
 
   @override
@@ -257,8 +229,12 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
   void _handleSeekDragEnd(DragEndDetails details) {
      if (_isDraggingLoopStart || _isDraggingLoopEnd) return;
 
-     if (_dragPosition != null && widget.onSeek != null) {
-        widget.onSeek!(_dragPosition!);
+     if (_dragPosition != null) {
+        if (widget.onSeek != null) {
+           widget.onSeek!(_dragPosition!);
+        }
+        // Snap the visual position so when drag state clears, it doesn't jump back
+        _visualPosition = _dragPosition!;
      }
      _dragPosition = null;
      setState(() {});
@@ -355,7 +331,10 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
      final double touchPercent = details.localPosition.dx / width;
      final int newMs = (touchPercent * totalMs).toInt();
      if (widget.onSeek != null) {
-        widget.onSeek!(Duration(milliseconds: newMs));
+        final newDur = Duration(milliseconds: newMs);
+        widget.onSeek!(newDur);
+        _visualPosition = newDur;
+        setState(() {});
      }
   }
 

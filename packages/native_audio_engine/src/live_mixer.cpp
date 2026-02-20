@@ -63,6 +63,11 @@ LiveMixer::~LiveMixer() {
 
 
 void LiveMixer::startPlayback() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _masterEnvelope = 0.0f;
+    _targetEnvelope = 1.0f;
+    _isPlaying = true;
+    
     if (_deviceInit) {
         if (ma_device_start(&_device) != MA_SUCCESS) {
             std::cerr << "Failed to start playback device." << std::endl;
@@ -71,6 +76,9 @@ void LiveMixer::startPlayback() {
 }
 
 void LiveMixer::stopPlayback() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _isPlaying = false;
+    
     if (_deviceInit) {
         ma_device_stop(&_device);
     }
@@ -166,43 +174,16 @@ void LiveMixer::seek(int64_t positionSample) {
         soundtouch_clear(_soundTouch);
     }
     
-    // Also reset atomic counter to match visual seek? 
-    // Wait, atomic counter is "Frames Written To Hardware". 
-    // If we seek in the file, we are NOT rewinding the hardware clock.
-    // The hardware clock keeps ticking.
-    // The "Position" returned to UI should be the FILE position, not the hardware uptime?
+    // Clear any temporary buffers
+    _mixBuffer.assign(_mixBuffer.size(), 0.0f);
     
-    // Ah, the user says: "Total de frames procesados / Frecuencia...".
-    // "Manten un conteo global de estos frames desde que inició la reproducción."
+    // Reset envelope to 0 for a quick 20ms fade-in of the new audio 
+    // to prevent any pops from non-zero crossings
+    _masterEnvelope = 0.0f;
     
-    // If we seek, we change the _currentPosition (read pointer).
-    // The "Atomic Position" is usually "Total Frames Played since App Start".
-    // But we want to sync the PLAYHEAD.
-    
-    // The playhead position = _currentPosition (File Read Pointer).
-    // But _currentPosition is updated in the audio thread.
-    // We can just atomic load `_currentPosition` instead of `_framesWritten`?
-    
-    // Yes, if we want to know where we ARE in the song.
-    // But `_currentPosition` is updated inside `process`, which is protected by mutex.
-    // If we make `_currentPosition` atomic, we can read it lock-free.
-    
-    // Let's change strategy: Make `_currentPosition` atomic. 
-    // `_framesWritten` is useful for uptime, but `_currentPosition` is what determines the seek bar.
-    
-    // HOWEVER, using `_framesWritten` (monotonic hardware clock) helps calculating drift.
-    // But for a simple "where is the playhead", reading the atomic read-pointer is best.
-    
-    // Let's make `_currentPosition` atomic via a separate shadow variable to avoid locking read.
-    // Inside process Loop:
-    // ... calculate ...
-    // _currentPosition++;
-    // _atomicPosition.store(_currentPosition, memory_order_relaxed);
-    
-    // I will implement `_atomicPosition` shadow variable.
+    // Update UI shadow
     _atomicFramesWritten.store(_currentPosition, std::memory_order_release);
 }
-
 int64_t LiveMixer::getPosition() {
     // This is the old locked getter. 
     // We should implement new atomic getter.
@@ -301,6 +282,13 @@ void LiveMixer::_mixInternal(float* outputBuffer, int numFrames) {
 int LiveMixer::process(float* outputBuffer, int numFrames) {
     std::lock_guard<std::mutex> lock(_mutex);
     
+    if (!_isPlaying) {
+        memset(outputBuffer, 0, numFrames * 2 * sizeof(float));
+        // Reset envelope so it fades in again when starting
+        _masterEnvelope = 0.0f;
+        return numFrames;
+    }
+    
     // --- 1.0x SOUNDTOUCH BYPASS OVERRIDE ---
     // If speed is practically 1.0, bypass SoundTouch and its WSOLA artifacts entirely.
     bool bypassSoundTouch = std::abs(_speed - 1.0f) < 0.001f;
@@ -351,6 +339,23 @@ int LiveMixer::process(float* outputBuffer, int numFrames) {
         if (samplesReceived < numFrames) {
              memset(outputBuffer + (samplesReceived * 2), 0, (numFrames - samplesReceived) * 2 * sizeof(float));
         }
+    }
+    
+    // --- APPLY ENVELOPE ---
+    // Smooth 20ms fade based on 44100hz
+    float envelopeStep = 1.0f / (44100.0f * 0.02f); 
+    
+    for (int i = 0; i < numFrames; i++) {
+        if (_masterEnvelope < _targetEnvelope) {
+            _masterEnvelope += envelopeStep;
+            if (_masterEnvelope > _targetEnvelope) _masterEnvelope = _targetEnvelope;
+        } else if (_masterEnvelope > _targetEnvelope) {
+            _masterEnvelope -= envelopeStep;
+            if (_masterEnvelope < _targetEnvelope) _masterEnvelope = _targetEnvelope;
+        }
+        
+        outputBuffer[i*2] *= _masterEnvelope;
+        outputBuffer[i*2 + 1] *= _masterEnvelope;
     }
     
     // Update Atomic Shadow for UI

@@ -252,7 +252,10 @@ class AudioManager {
   }
 
   
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) async {
+    _source?.seek(position);
+    _positionController.add(position);
+  }
   
   // FIX: Do NOT set player speed. We handle time-stretching manually in the processor.
   Future<void> setSpeed(double speed) async {

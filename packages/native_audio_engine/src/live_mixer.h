@@ -62,12 +62,17 @@ private:
    std::mutex _mutex;
 
    int64_t _currentPosition = 0;
+   bool _isPlaying = false;
    
    // Loop
    bool _loopEnabled = false;
    int64_t _loopStart = 0;
    int64_t _loopEnd = 0;
 
+   // Envelopes for click-prevention
+   float _masterEnvelope = 1.0f;
+   float _targetEnvelope = 1.0f;
+   
    // Internal mixing logic (raw, no speed)
    void _mixInternal(float* outputBuffer, int numFrames);
 
