@@ -107,6 +107,48 @@ class MixerProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // --- SoundTouch Tuning ---
+  int get stSequenceMs => _settingsService.stSequenceMs;
+  int get stSeekWindowMs => _settingsService.stSeekWindowMs;
+  int get stOverlapMs => _settingsService.stOverlapMs;
+
+  Future<void> setStSequenceMs(int val) async {
+    await _settingsService.setStSequenceMs(val);
+    _applyStTuning();
+    notifyListeners();
+  }
+
+  Future<void> setStSeekWindowMs(int val) async {
+    await _settingsService.setStSeekWindowMs(val);
+    _applyStTuning();
+    notifyListeners();
+  }
+
+  Future<void> setStOverlapMs(int val) async {
+    await _settingsService.setStOverlapMs(val);
+    _applyStTuning();
+    notifyListeners();
+  }
+
+  void _applyStTuning() {
+    _audioManager.updateSoundTouchTuning(
+      stSequenceMs,
+      stSeekWindowMs,
+      stOverlapMs,
+    );
+  }
+
+  void applyRhythmicProfile() {
+      setStSequenceMs(40);
+      setStSeekWindowMs(15);
+      setStOverlapMs(8);
+  }
+
+  void applyMelodicProfile() {
+      setStSequenceMs(100);
+      setStSeekWindowMs(30);
+      setStOverlapMs(16);
+  }
 
   Future<void> loadExercise(List<Map<String, String>> tracks) async {
     _isLoading = true;
@@ -136,6 +178,8 @@ class MixerProvider with ChangeNotifier {
     
     try {
       if (!_isPlaying) {
+        // Apply initial tuning before playing in case it was changed while stopped
+        _applyStTuning();
         await _audioManager.pause();
       } else {
         await _audioManager.play();

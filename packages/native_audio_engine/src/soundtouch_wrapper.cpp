@@ -37,6 +37,10 @@ extern "C" {
         static_cast<SoundTouch*>(st)->setSampleRate(srate);
     }
 
+    void soundtouch_setSetting(void* st, int settingId, int value) {
+        static_cast<SoundTouch*>(st)->setSetting(settingId, value);
+    }
+
     void soundtouch_putSamples(void* st, const float* samples, int numSamples) {
         static_cast<SoundTouch*>(st)->putSamples(samples, numSamples);
     }

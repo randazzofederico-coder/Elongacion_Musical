@@ -56,10 +56,36 @@ class MixerStreamSource extends StreamAudioSource {
       _liveMixer.setSpeed(_currentTempo);
   }
   
-
   void setTempo(double tempo) {
     _currentTempo = tempo;
     _liveMixer.setSpeed(tempo);
+  }
+
+  // SoundTouch Settings IDs (Mapped directly from SoundTouch.h)
+  static const int SETTING_USE_AA_FILTER       = 0;
+  static const int SETTING_AA_FILTER_LENGTH    = 1;
+  static const int SETTING_USE_QUICKSEEK       = 2;
+  static const int SETTING_SEQUENCE_MS         = 3;
+  static const int SETTING_SEEKWINDOW_MS       = 4;
+  static const int SETTING_OVERLAP_MS          = 5;
+
+  void tuneSoundTouch({int? sequenceMs, int? seekWindowMs, int? overlapMs}) {
+      if (sequenceMs != null) _liveMixer.setSoundTouchSetting(SETTING_SEQUENCE_MS, sequenceMs);
+      if (seekWindowMs != null) _liveMixer.setSoundTouchSetting(SETTING_SEEKWINDOW_MS, seekWindowMs);
+      
+      // We repurpose overlapMs to set the AA Filter Length instead since Overlap isn't as easily tunable
+      if (overlapMs != null) _liveMixer.setSoundTouchSetting(SETTING_AA_FILTER_LENGTH, overlapMs);
+      
+      debugPrint("SoundTouch Tuned: Seq=$sequenceMs, Seek=$seekWindowMs, AAFilterTap=$overlapMs");
+  }
+
+  // Helper Profiles
+  void applyRhythmicProfile() {
+      tuneSoundTouch(sequenceMs: 40, seekWindowMs: 15, overlapMs: 8);
+  }
+
+  void applyMelodicProfile() {
+      tuneSoundTouch(sequenceMs: 100, seekWindowMs: 30, overlapMs: 16);
   }
   
   // -- Control Pass-throughs --

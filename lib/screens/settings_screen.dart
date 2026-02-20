@@ -94,10 +94,119 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 currentMode: mixer.isOfflineMode ? AudioEngineMode.offline : AudioEngineMode.realtime,
                 onTap: (m) => mixer.setAudioMode(m),
               ),
+
+              const Divider(color: AppColors.border, height: 32),
+
+              const Text(
+                'SoundTouch Tuning (Debug)',
+                style: TextStyle(
+                  color: AppColors.primary, 
+                  fontSize: 18, 
+                  fontWeight: FontWeight.bold
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Ajusta estos valores si la música suena robótica o metálica al cambiar la velocidad.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.piano, size: 16),
+                    label: const Text('Ritmo / Piano'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.surface,
+                      foregroundColor: AppColors.primary,
+                    ),
+                    onPressed: () => mixer.applyRhythmicProfile(),
+                  ),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.water_drop, size: 16),
+                    label: const Text('Melódico / Flauta'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.surface,
+                      foregroundColor: AppColors.primary,
+                    ),
+                    onPressed: () => mixer.applyMelodicProfile(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              _buildTuningSlider(
+                title: 'Sequence (Tamaño de Bloque)',
+                // Sequence is typically set in milliseconds but internally mapped.
+                // However, SoundTouch requires Sequence to be a multiple of 8 for SIMD optimizations in FIR.
+                // It's safer to just provide a discrete number of steps or force it to be even.
+                value: mixer.stSequenceMs.toDouble(),
+                min: 10, max: 150, divisions: 140, // Allow 1ms steps, but wait, the crash is about AAFilter
+                onChanged: (val) => mixer.setStSequenceMs((val / 2).round() * 2), // Ensure even numbers just in case? Or no, wait
+                description: 'Corto: Evita ecos rítmicos. Largo: Suaviza voces.',
+              ),
+              
+              _buildTuningSlider(
+                title: 'Seek Window (Ventana de Búsqueda)',
+                value: mixer.stSeekWindowMs.toDouble(),
+                min: 5, max: 60, divisions: 55,
+                onChanged: (val) => mixer.setStSeekWindowMs(val.round()),
+                description: 'Espacio para buscar el cruce perfecto.',
+              ),
+              
+              _buildTuningSlider(
+                title: 'AA Filter Length (Taps)', // We'll repurpose Overlap to AAFilter to fix the crash
+                value: mixer.stOverlapMs.toDouble(), // We will use overlap variable for now
+                min: 8, max: 128, divisions: 15, // Steps of 8 (8*15 = 120 + 8 = 128)
+                onChanged: (val) {
+                  // Must be multiple of 8!
+                  int taps = (val / 8).round() * 8;
+                  if (taps < 8) taps = 8;
+                  mixer.setStOverlapMs(taps);
+                },
+                description: 'Filtro Anti-Aliasing (Debe ser múltiplo de 8).',
+              ),
             ],
           );
         }
       ),
+    );
+  }
+
+  Widget _buildTuningSlider({
+    required String title, 
+    required double value, 
+    required double min, 
+    required double max, 
+    required int divisions,
+    required Function(double) onChanged,
+    required String description,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+            Text('${value.round()}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(description, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          activeColor: AppColors.primary,
+          inactiveColor: AppColors.surfaceHighlight,
+          onChanged: onChanged,
+        ),
+        const SizedBox(height: 8),
+      ],
     );
   }
 

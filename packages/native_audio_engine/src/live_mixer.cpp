@@ -2,10 +2,9 @@
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "live_mixer.h"
-#include "soundtouch/include/SoundTouch.h"
+#include "soundtouch_wrapper.h"
 
 using namespace std;
-using namespace soundtouch;
 
 // Forward declaration of callback wrapper
 void data_callback_wrapper(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
@@ -17,22 +16,11 @@ void data_callback_wrapper(ma_device* pDevice, void* pOutput, const void* pInput
 
 LiveMixer::LiveMixer() {
     // Initialize SoundTouch
-    SoundTouch* st = new SoundTouch();
-    st->setSampleRate(44100);
-    st->setChannels(2);
-    st->setTempo(1.0f);
-    st->setPitch(1.0f);
-    st->setRate(1.0f);
+    _soundTouch = soundtouch_create();
+    soundtouch_setSampleRate(_soundTouch, 44100);
+    soundtouch_setChannels(_soundTouch, 2);
+    soundtouch_setTempo(_soundTouch, 1.0f);
     
-    // --- REALTIME OPTIMIZATIONS (Option 1) ---
-    // Reduce processing time to prevent Android audio buffer underruns
-    st->setSetting(SETTING_USE_QUICKSEEK, 1);     // Use quick seek algorithm
-    st->setSetting(SETTING_SEQUENCE_MS, 40);      // Default 82ms -> 40ms (faster chunks)
-    st->setSetting(SETTING_SEEKWINDOW_MS, 15);    // Default 28ms -> 15ms (less lookahead)
-    st->setSetting(SETTING_OVERLAP_MS, 8);        // Default 8ms -> Keep 8ms for smoothness
-
-    
-    _soundTouch = st;
     _mixBuffer.resize(1024 * 2); // default capacity
 
     // initialize miniaudio
@@ -62,7 +50,8 @@ LiveMixer::~LiveMixer() {
     }
     
     if (_soundTouch) {
-        delete static_cast<SoundTouch*>(_soundTouch);
+        soundtouch_destroy(_soundTouch);
+        _soundTouch = nullptr;
     }
 
     // Cleanup tracks
@@ -90,7 +79,6 @@ void LiveMixer::stopPlayback() {
 int64_t LiveMixer::getAtomicPosition() {
     return _atomicFramesWritten.load(std::memory_order_acquire);
 }
-
 
 void LiveMixer::addTrack(const char* id, const float* data, int numSamples, int channels) {
     if (!id || !data || numSamples <= 0) return;
@@ -175,7 +163,7 @@ void LiveMixer::seek(int64_t positionSample) {
     _currentPosition = positionSample;
     
     if (_soundTouch) {
-        static_cast<SoundTouch*>(_soundTouch)->clear();
+        soundtouch_clear(_soundTouch);
     }
     
     // Also reset atomic counter to match visual seek? 
@@ -231,7 +219,14 @@ void LiveMixer::setSpeed(float speed) {
     std::lock_guard<std::mutex> lock(_mutex);
     _speed = speed;
     if (_soundTouch) {
-        static_cast<SoundTouch*>(_soundTouch)->setTempo(speed);
+        soundtouch_setTempo(_soundTouch, speed);
+    }
+}
+
+void LiveMixer::setSoundTouchSetting(int settingId, int value) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_soundTouch) {
+        soundtouch_setSetting(_soundTouch, settingId, value);
     }
 }
 
@@ -314,58 +309,42 @@ int LiveMixer::process(float* outputBuffer, int numFrames) {
         // Direct Mixing to Output Buffer
         _mixInternal(outputBuffer, numFrames);
         
-        // Ensure SoundTouch is clear for when we switch back
         if (_soundTouch) {
-           static_cast<SoundTouch*>(_soundTouch)->clear();
+            soundtouch_clear(_soundTouch);
         }
     } else {
-        // --- SOUNDTOUCH TIME-STRETCHING PATH ---
         if (!_soundTouch) return 0;
-        
-        SoundTouch* st = static_cast<SoundTouch*>(_soundTouch);
         
         int samplesReceived = 0;
         int maxIt = 100; // Safety break
         
-        // OPTION 4: Dynamic Micro-Block Processing
-        // Force SoundTouch to ingest data in microscopic chunks.
-        // This spreads CPU usage evenly over callbacks rather than blocking the thread with huge 2048-frame injestions.
+        // Option 4 Micro-Processing chunk logic applies perfectly to Vocoder as well
         const int MAX_CHUNK_FRAMES = 512; 
         
         while (samplesReceived < numFrames && maxIt-- > 0) {
-            // How much do we STILL need?
             int neededFrames = numFrames - samplesReceived;
             
-            // Try receive what's currently available in SoundTouch's output buffer
-            int got = st->receiveSamples(outputBuffer + (samplesReceived * 2), neededFrames);
+            // Try receive what's available from SoundTouch
+            int got = soundtouch_receiveSamples(_soundTouch, outputBuffer + (samplesReceived * 2), neededFrames);
             samplesReceived += got;
             
-            // If we got all we need for this miniaudio callback, BREAK IMMEDIATELY.
-            // Do not keep digesting data if we are full. This yields the CPU back to Android.
             if (samplesReceived >= numFrames) break;
             
-            // We still need more frames because SoundTouch is empty. 
-            // Ingest a SMALL chunk from our tracks.
+            // Ingest more data
             int chunkFrames = MAX_CHUNK_FRAMES; 
-            
-            // Optional heuristic: If speed is very high, we might need slightly more data to yield output, 
-            // but keep it capped to prevent spikes.
             if (_speed > 1.0f) {
                 chunkFrames = (int)(MAX_CHUNK_FRAMES * _speed);
-                if (chunkFrames > 1024) chunkFrames = 1024; // Hard cap
+                if (chunkFrames > 1024) chunkFrames = 1024;
             }
             
             if (_mixBuffer.size() < chunkFrames * 2) {
                 _mixBuffer.resize(chunkFrames * 2);
             }
             
-            // Mix original tracks
             _mixInternal(_mixBuffer.data(), chunkFrames);
             
             // Feed to SoundTouch
-            st->putSamples(_mixBuffer.data(), chunkFrames);
-            
-            // Loop repeats: next iteration will try to receiveSamples again.
+            soundtouch_putSamples(_soundTouch, _mixBuffer.data(), chunkFrames);
         }
         
         // Fill remaining with silence if we somehow failed to generate enough (e.g. max iterations reached)
@@ -448,5 +427,8 @@ extern "C" {
     EXPORT void live_mixer_set_speed(void* mixer, float speed) {
         static_cast<LiveMixer*>(mixer)->setSpeed(speed);
     }
-}
 
+    EXPORT void live_mixer_set_soundtouch_setting(void* mixer, int settingId, int value) {
+        static_cast<LiveMixer*>(mixer)->setSoundTouchSetting(settingId, value);
+    }
+}

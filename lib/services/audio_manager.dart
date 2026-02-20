@@ -255,12 +255,17 @@ class AudioManager {
   Future<void> seek(Duration position) => _player.seek(position);
   
   // FIX: Do NOT set player speed. We handle time-stretching manually in the processor.
-  // If we set player speed, JustAudio will ALSO speed up the stream, resulting in double speedup
-  // and pitch shifting.
-  // We want JustAudio to play our "pre-stretched" stream at 1.0x (normal sample rate).
   Future<void> setSpeed(double speed) async {
       _source?.setTempo(speed);
       // _player.setSpeed(speed); // REMOVE THIS
+  }
+
+  void updateSoundTouchTuning(int seq, int seek, int overlap) {
+      _source?.tuneSoundTouch(
+        sequenceMs: seq,
+        seekWindowMs: seek,
+        overlapMs: overlap,
+      );
   }
   
   void setMasterVolume(double vol) {

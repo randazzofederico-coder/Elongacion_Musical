@@ -22,6 +22,9 @@ extern "C" {
     EXPORT void soundtouch_setChannels(void* st, int numChannels);
     EXPORT void soundtouch_setSampleRate(void* st, int srate);
     
+    // Internal WSOLA Tuning
+    EXPORT void soundtouch_setSetting(void* st, int settingId, int value);
+    
     // Processing
     // Puts samples into the pipeline.
     // 'samples' should be interleaved if channels > 1.

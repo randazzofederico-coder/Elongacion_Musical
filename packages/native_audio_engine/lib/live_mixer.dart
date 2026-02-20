@@ -118,4 +118,9 @@ class LiveMixer {
      if (_isDisposed) return;
      _bindings.setSpeed(_handle, speed);
   }
+  
+  void setSoundTouchSetting(int settingId, int value) {
+     if (_isDisposed) return;
+     _bindings.setSoundTouchSetting(_handle, settingId, value);
+  }
 }

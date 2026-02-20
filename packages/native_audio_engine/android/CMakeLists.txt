@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.4.1)
 
 project(native_audio_engine_plugin)
 
+# --- AUDIO DSP OPTIMIZATIONS ---
+# Enforce maximum optimization even during Flutter Debug builds.
+# SoundTouch requires heavy math which starves the CPU without these flags.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -ffast-math -fomit-frame-pointer")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -ffast-math -fomit-frame-pointer")
+add_definitions(-DSOUNDTOUCH_FLOAT_SAMPLES=1)
+# -------------------------------
+
 set(SOUNDTOUCH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../src/soundtouch")
 
 set(SOUNDTOUCH_SOURCES
@@ -24,6 +32,8 @@ set(SOUNDTOUCH_SOURCES
 add_library(native_audio_engine_plugin SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/soundtouch_wrapper.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/live_mixer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/Vocoder.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/kiss_fft.c"
     ${SOUNDTOUCH_SOURCES}
 )
 

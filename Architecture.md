@@ -103,20 +103,20 @@ lib/
 
 ## 3. ENGINE DE AUDIO (Native C++ Mixer)
 ## 3. ENGINE DE AUDIO (Native Audio Engine)
-- **Core:** `native_audio_engine` (Miniaudio + SoundTouch + C++ Logic).
+- **Core:** `native_audio_engine` (Miniaudio + Custom Phase Vocoder / KissFFT + C++ Logic).
 - **Playback Strategy:** `MixerStreamSource` delegates control to `LiveMixer`.
   - **Status:** **ACTIVE**. Mixing, Time-Stretching, and Timing are handled exclusively by C++.
   - **Data Path:** `Float32` optimized. WAV -> Memory -> FFI -> C++ `LiveMixer`.
-  - **Mixer Pipeline:** `Tracks` -> `Summing` -> `SoundTouch (Time Stretch)` -> `Miniaudio Output`.
+  - **Mixer Pipeline:** `Tracks` -> `Summing` -> `Vocoder (Time Stretch)` -> `Miniaudio Output`.
 - **Timing & Synchronization (The "Atomic Clock"):**
   - **Source of Truth:** An atomic frame counter in the C++ audio callback.
   - **UI Sync:** Dart polls this atomic counter at 60fps via `Ticker` in `WaveformSeekBar`.
   - **Playhead:** Reflects exactly what samples are being sent to the DAC (hardware compensated).
-- **Time Stretching (Native):**
-  - **Implementation:** `SoundTouch` is integrated directly into the `LiveMixer::process` loop.
-  - **Efficiency:** Zero-copy processing. Audio buffer stays in C++ memory.
-  - **Control:** `setSpeed()` updates SoundTouch tempo in real-time.
-  - **Optimization:** Internal buffer size increased to 2048 frames to prevent underruns. Buffer cleared on Seek.
+- **Time Stretching (SoundTouch Engine):**
+  - **Implementation:** Reverted to the highly optimized `SoundTouch` library (C++) from the experimental Phase Vocoder, significantly lowering CPU footprint.
+  - **Efficiency:** Zero-copy processing. Audio buffer stays in C++ memory. Compiled with advanced DSP flags (`-O3`, `-ffast-math`) on Android to prevent CPU starvation in real-time.
+  - **Control:** `setSpeed()` updates tempo in real-time.
+  - **Tuning UI:** Added debug sliders to the Settings screen to expose WSOLA parameters (`Sequence`, `SeekWindow`, `AAFilter Length`), allowing the user to mitigate "metallic" artifacts depending on the audio source (rhythmic vs melodic).
 - **Audio Tools:**
   - `tool/convert_to_mono.dart`: Script utilitario para convertir recursivamente todos los archivos de una carpeta a MONO, *excepto* `piano.wav`.
     - Usage: `dart tool/convert_to_mono.dart`
@@ -200,16 +200,23 @@ lib/
   - **Cause:** `just_audio.position` reports the time of the *next buffer to be played*, not the *currently hearing* sample.
   - **Mitigation:** Applied a "Calculated Latency Compensation" (`latencyHint`) to `MixerStreamSource`.
   - **Status:** Improved but inconsistent. Requires architectural review (Native Timestamp Querying).
+- **Phase Vocoder CPU Stalling (Crackling):** [RESOLVED]
+  - **Issue:** Severe audio dropouts, silence, and "chisporroteos" when time-stretching is active on mobile.
+  - **Cause:** The custom Transient-Preserving Phase Vocoder, or unoptimized C++ builds, caused CPU starvation.
+  - **Mitigation:** Reverted to `SoundTouch` and forced maximum compiler optimization (`-O3` and `-ffast-math`) in Android's `CMakeLists.txt`, resolving the starvation issue entirely.
 - **Loop Latency:** Dramatically improved with Native Mixing, though minor artifacts may persist at very tight loop boundaries depending on OS scheduling.
 - **Portrait Lock Failure (Android Tablet):** The `SystemChrome.setPreferredOrientations` call is currently ineffective on the test device (TB520FU).
 - **Landscape UI on Mobile:** While functional via "Adaptive Landscape Mode" (Knobs), the UI density is high.
 - **Seek Bar Interaction:** Handle dragging requires precision. "Hold to drag" improves this but can still be refined.
 
+
 ## 8. FUTURE ROADMAP / PENDING TASKS
 - **Loop Logic Review:** [DONE] Verify edge cases in C++ looping and ensure UI sync is perfect. (Implemented Sync Map).
 - **Seek Latency:** Improve seek responsiveness. currently `MixerStreamSource` buffering might cause slight delay.
 - **Audio Stability:** Investigate intermittent artifacts (clicks/pops) reported during testing. robustecer estabilidad.
-- **Seamless Loop Solution:**
-  - **Option B (Implemented):** `native_audio_engine` integration is now active. Continue refining.
-- **High-Quality Time Stretching:** Investigar alternativas (RubberBand, Superpowered) para mejorar calidad en velocidades < 0.8x.
+- **High-Quality Time Stretching Rewrite:** [ON HOLD]
+  - **Status:** We have successfully integrated and optimized SoundTouch. The immediate goal is tuning it via the new UI. 
+  - **Future:** If SoundTouch artifacts cannot be tuned away, we will evaluate:
+    - Integrating `RubberBand Library` (If GPL licensing permits for the project).
+    - Purchasing a commercial license for `élastique` or `Superpowered`.
 - **Export:** Renderizado offline de la mezcla final a archivo de audio.

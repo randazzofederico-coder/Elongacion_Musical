@@ -41,6 +41,7 @@ public:
     int64_t getAtomicPosition(); // Returns frames played (hardware compensated)
     
     void setSpeed(float speed);
+    void setSoundTouchSetting(int settingId, int value);
 
     // Audio Processing
     // mix into outputBuffer (interleaved stereo)
@@ -92,5 +93,9 @@ private:
 
    static void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 };
+
+extern "C" {
+    EXPORT void live_mixer_set_soundtouch_setting(void* mixer, int settingId, int value);
+}
 
 #endif // LIVE_MIXER_H

@@ -41,6 +41,8 @@ list(APPEND PLUGIN_SOURCES
   "native_audio_engine_plugin.h"
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/soundtouch_wrapper.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/live_mixer.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../src/Vocoder.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../src/kiss_fft.c"
 )
 
 # Define the plugin library target. Its name must not be changed (see comment

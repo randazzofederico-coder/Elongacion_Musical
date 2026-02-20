@@ -40,4 +40,20 @@ class SettingsService {
   Future<void> setLockPortrait(bool value) async {
     await _prefs.setBool(_lockPortraitKey, value);
   }
+
+  // --- SoundTouch Tuning ---
+  int get stSequenceMs => _prefs.getInt('st_seq') ?? 82; // Default SoundTouch Sequence
+  Future<void> setStSequenceMs(int value) async {
+    await _prefs.setInt('st_seq', value);
+  }
+
+  int get stSeekWindowMs => _prefs.getInt('st_seek') ?? 28; // Default SoundTouch SeekWindow
+  Future<void> setStSeekWindowMs(int value) async {
+    await _prefs.setInt('st_seek', value);
+  }
+
+  int get stOverlapMs => _prefs.getInt('st_overlap') ?? 8; // Default SoundTouch Overlap
+  Future<void> setStOverlapMs(int value) async {
+    await _prefs.setInt('st_overlap', value);
+  }
 }
