@@ -64,6 +64,8 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
   double _initialScrollOffset = 0.0;
   Offset _initialFocalPoint = Offset.zero;
   bool _isInteractingWithRuler = false;
+  int _activePointers = 0;
+  bool _sessionWasZooming = false;
 
   @override
   void initState() {
@@ -156,13 +158,51 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
         final width = constraints.maxWidth;
         final height = 100.0; // Taller fixed height for waveform
 
-        return GestureDetector(
-          onScaleStart: (details) => _handleScaleStart(details, width, totalMilliseconds),
-          onScaleUpdate: (details) => _handleScaleUpdate(details, width, totalMilliseconds),
-          onScaleEnd: (details) => _handleScaleEnd(details),
-          onTapUp: (details) => _handleTap(details, width, totalMilliseconds),
-          child: Column(
-            children: [
+        return Listener(
+          onPointerDown: (event) {
+             _activePointers++;
+             if (_activePointers >= 2) {
+                 _sessionWasZooming = true;
+                 if (_dragPosition != null || _isDraggingLoopStart || _isDraggingLoopEnd) {
+                    setState(() {
+                        _dragPosition = null;
+                        _isDraggingLoopStart = false;
+                        _isDraggingLoopEnd = false;
+                        _dragLoopStart = null;
+                        _dragLoopEnd = null;
+                    });
+                 }
+             }
+          },
+          onPointerUp: (event) {
+             _activePointers--;
+             if (_activePointers <= 0) {
+                 _activePointers = 0;
+                 Future.microtask(() {
+                     if (_activePointers == 0) {
+                         _sessionWasZooming = false;
+                     }
+                 });
+             }
+          },
+          onPointerCancel: (event) {
+             _activePointers--;
+             if (_activePointers <= 0) {
+                 _activePointers = 0;
+                 Future.microtask(() {
+                     if (_activePointers == 0) {
+                         _sessionWasZooming = false;
+                     }
+                 });
+             }
+          },
+          child: GestureDetector(
+            onScaleStart: (details) => _handleScaleStart(details, width, totalMilliseconds),
+            onScaleUpdate: (details) => _handleScaleUpdate(details, width, totalMilliseconds),
+            onScaleEnd: (details) => _handleScaleEnd(details),
+            onTapUp: (details) => _handleTap(details, width, totalMilliseconds),
+            child: Column(
+              children: [
               if (widget.bpm != null && widget.bpm! > 0 && widget.timeSignatureNumerator != null && widget.timeSignatureNumerator! > 0)
                 _buildLoopRuler(width, totalMilliseconds),
               // Waveform Display (Clipped to prevent drawing over transport)
@@ -207,6 +247,7 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
             ),
           ],
         ),
+      ),
       );
     },
   );
@@ -252,6 +293,15 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
 
   // --- SCALE GESTURES (Zoom & Pan & Single Drag) ---
   void _handleScaleStart(ScaleStartDetails details, double width, double totalMs) {
+      if (_sessionWasZooming) {
+          if (details.pointerCount >= 2) {
+              _baseZoomLevel = _zoomLevel;
+              _initialScrollOffset = _scrollOffset;
+              _initialFocalPoint = details.localFocalPoint;
+          }
+          return;
+      }
+      
       if (details.pointerCount == 1) {
           // Identify if it's Ruler or Waveform
           _isInteractingWithRuler = (details.localFocalPoint.dy <= 24.0) && widget.isLoopEnabled;
@@ -263,13 +313,31 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
              _dragPosition = Duration(milliseconds: ms.toInt().clamp(0, totalMs.toInt()));
              setState(() {});
           }
-      } else if (details.pointerCount >= 2) {
-          _baseZoomLevel = _zoomLevel;
-          _initialScrollOffset = _scrollOffset;
-          _initialFocalPoint = details.localFocalPoint;
       }
   }
+
   void _handleScaleUpdate(ScaleUpdateDetails details, double width, double totalMs) {
+      if (_sessionWasZooming) {
+          if (details.pointerCount >= 2) {
+              // Zoom and Pan
+              double newZoom = (_baseZoomLevel * details.scale).clamp(1.0, 50.0);
+              
+              double virtualXStart = _initialFocalPoint.dx + _initialScrollOffset;
+              double virtualXNew = virtualXStart * (newZoom / _baseZoomLevel);
+              // Account for pan distance
+              double newScrollOffset = virtualXNew - details.localFocalPoint.dx;
+              
+              double maxScroll = (width * newZoom) - width;
+              
+              setState(() {
+                  _zoomLevel = newZoom;
+                  _scrollOffset = newScrollOffset.clamp(0.0, maxScroll >= 0 ? maxScroll : 0.0);
+              });
+          }
+          // Ignore single finger updates when in zoom session
+          return;
+      }
+
       if (details.pointerCount == 1) {
           if (_isInteractingWithRuler) {
              _handleLoopDragUpdate(details.localFocalPoint, width, totalMs);
@@ -279,25 +347,15 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
              _dragPosition = Duration(milliseconds: ms.toInt().clamp(0, totalMs.toInt()));
              setState(() {});
           }
-      } else if (details.pointerCount >= 2) {
-          // Zoom and Pan
-          double newZoom = (_baseZoomLevel * details.scale).clamp(1.0, 50.0);
-          
-          double virtualXStart = _initialFocalPoint.dx + _initialScrollOffset;
-          double virtualXNew = virtualXStart * (newZoom / _baseZoomLevel);
-          // Account for pan distance simply by using details.localFocalPoint.dx
-          double newScrollOffset = virtualXNew - details.localFocalPoint.dx;
-          
-          double maxScroll = (width * newZoom) - width;
-          
-          setState(() {
-              _zoomLevel = newZoom;
-              _scrollOffset = newScrollOffset.clamp(0.0, maxScroll >= 0 ? maxScroll : 0.0);
-          });
       }
   }
 
   void _handleScaleEnd(ScaleEndDetails details) {
+      if (_sessionWasZooming) {
+          // If we are/were in a zoom session, avoid taking action on fingers leaving.
+          return;
+      }
+
       if (_isInteractingWithRuler) {
           _handleLoopDragEnd();
       } else if (_dragPosition != null) {
@@ -408,6 +466,8 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
   }
   
   void _handleTap(TapUpDetails details, double width, double totalMs) {
+     if (_sessionWasZooming) return;
+     
      // Identify if we tapped the loop ruler, if so, ignore seek
      if (details.localPosition.dy <= 24.0 && widget.isLoopEnabled) return;
 

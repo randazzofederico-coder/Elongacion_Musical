@@ -152,10 +152,10 @@ lib/
 
 ### B. Componentes Avanzados
 - **WaveformSeekBar (New):**
-  - **Visualization:** Draws the Master Mix waveform as a background.
+  - **Visualization:** Draws the Master Mix waveform as a background. Uses dynamic resolution scaling based on audio duration (density-based parsing) to preserve high visual detail when zooming deep into long tracks.
   - **Semantic LOD:** Ruler dynamically drops beat markers and offsets measure labels when zoomed out.
   - **Interaction:**
-    - **Multi-Touch:** Pinch-to-zoom (1x-50x) and two-finger pan/scroll.
+    - **Multi-Touch:** Pinch-to-zoom (1x-50x) and two-finger pan/scroll. Implements precise hardware pointer tracking via `Listener` to explicitly separate multi-touch navigation sessions from single-touch actions, eliminating erratic playhead jumps upon finger release.
     - **Tap:** Instant precision seek.
     - **Loop Handles:** Drag ends to adjust. Adaptive snap to beat/measure based on zoom.
 - **Long-Throw Faders:** Control preciso de volumen con escala dB.

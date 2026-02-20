@@ -17,15 +17,15 @@ WavData parseWavBytes(Uint8List bytes) {
   // Convert Float64List (wav default) to Float32List
   final samples = wav.channels.map((channel) => Float32List.fromList(channel)).toList();
   
-  // Generate Waveform (Downsample to ~100 points per second or fixed width?)
-  // For vertical scrolling, we probably want fixed points per pixel height?
-  // Or just a fixed number of points to represent the whole file?
-  // VerticalWaveform renders the whole list into SizedBox(height).
-  // _WaveformPainter uses `points = channelData.length`.
-  // If the file is long, we don't want millions of points.
+  // Generate Waveform (Downsample to ~100 points per second for good zoom detail)
+  // Previously we used a fixed 2000 points, but that's too low for long tracks when zooming.
   
-  // Let's aim for ~2000 points max for visualization performance?
-  const int targetPoints = 2000;
+  // Calculate total seconds to determine dynamic points based on density.
+  final double durationInSeconds = wav.channels[0].length / wav.samplesPerSecond;
+  
+  // 150 points per second gives us roughly 1 point every ~6.6 milliseconds (plenty of detail for zoom).
+  // A 5 minute song will generate 45,000 points (acceptable for RAM, highly detailed for drawing).
+  final int targetPoints = (durationInSeconds * 150).toInt().clamp(2000, 100000);
   
   List<List<double>> waveform = [];
   
