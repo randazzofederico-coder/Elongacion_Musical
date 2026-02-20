@@ -5,7 +5,12 @@
 - **Audio Engine:** `just_audio` (multi-platform), `just_audio_windows` (Windows).
 - **Native Plugin:** `native_audio_engine` (C++ with SoundTouch, local patches for Windows).
 - **State Management:** `Provider`.
-- **Assets:** Archivos MP3/WAV locales ubicados en `assets/audio/`.
+- Assets: Archivos MP3/WAV locales ubicados en `assets/audio/`.
+
+## 1.1 VERSION CONTROL
+- **Repository:** [GitHub - Elongacion_Musical](https://github.com/randazzofederico-coder/Elongacion_Musical.git)
+- **Branch Strategy:** `master` (Protected/Main).
+- **Status:** Connected and synced (Feb 2026).
 
 ## 1.2 CURRENT APP STATE And OBJECTIVES
 > [!NOTE]
@@ -98,29 +103,23 @@ lib/
 
 ## 3. ENGINE DE AUDIO (Native C++ Mixer)
 ## 3. ENGINE DE AUDIO (Native Audio Engine)
-- **Core:** `native_audio_engine` (Miniaudio + C++ Logic).
+- **Core:** `native_audio_engine` (Miniaudio + SoundTouch + C++ Logic).
 - **Playback Strategy:** `MixerStreamSource` delegates control to `LiveMixer`.
-  - **Status:** **ACTIVE**. Mixing, Playback, and Timing are handled exclusively by C++.
-  - **Data Path:** `Float32` optimized. WAV -> Memory -> FFI -> C++ -> Miniaudio.
-  - **Latency:** Dependent on hardware buffer, but **synchronization is sample-accurate**.
+  - **Status:** **ACTIVE**. Mixing, Time-Stretching, and Timing are handled exclusively by C++.
+  - **Data Path:** `Float32` optimized. WAV -> Memory -> FFI -> C++ `LiveMixer`.
+  - **Mixer Pipeline:** `Tracks` -> `Summing` -> `SoundTouch (Time Stretch)` -> `Miniaudio Output`.
 - **Timing & Synchronization (The "Atomic Clock"):**
   - **Source of Truth:** An atomic frame counter in the C++ audio callback.
   - **UI Sync:** Dart polls this atomic counter at 60fps via `Ticker` in `WaveformSeekBar`.
-  - **Playhead:** No longer estimated or interpolated from high-level player timestamps. It reflects exactly what samples are being sent to the DAC.
-- **Loop Logic (Native):**
-  - **Implementation:** `LiveMixer` handles read-pointer wrapping internally.
-  - **Benefit:** Gapless looping is guaranteed at the sample level.
-- **Smart Seek & Continuity:**
-  - **Implementation:** `MixerStreamSource` detects if incoming read requests are contiguous.
-  - **Note:** With the move to direct native playback, `just_audio` is currently **bypassed** for playback to ensure sync.
-  - **Persistent Processor:** `AudioProcessor` (SoundTouch) instance is persisted across requests to maintain time-stretch state seamlessly.
-  - **Optimization (Bypass):** When `Tempo` and `Pitch` are 1.0 (default), `SoundTouch` processing is **bypassed entirely** to avoid overhead and specific library bugs (stalling on valid input).
+  - **Playhead:** Reflects exactly what samples are being sent to the DAC (hardware compensated).
+- **Time Stretching (Native):**
+  - **Implementation:** `SoundTouch` is integrated directly into the `LiveMixer::process` loop.
+  - **Efficiency:** Zero-copy processing. Audio buffer stays in C++ memory.
+  - **Control:** `setSpeed()` updates SoundTouch tempo in real-time.
+  - **Optimization:** Internal buffer size increased to 2048 frames to prevent underruns. Buffer cleared on Seek.
 - **Audio Tools:**
   - `tool/convert_to_mono.dart`: Script utilitario para convertir recursivamente todos los archivos de una carpeta a MONO, *excepto* `piano.wav`.
     - Usage: `dart tool/convert_to_mono.dart`
-- **Waveform Analysis:**
-  - Extracción de picos (RMS) durante la carga.
-  - Generación de datos de onda para visualización vertical.
 
 ### 3.1 ENGINE MODES & PLATFORM SPECIFICS
 - **Realtime Mode (Default):**
@@ -131,12 +130,10 @@ lib/
     - Result: Instant response to Fader/Mute/Solo changes.
   - **Windows/Desktop:** Optimized for **Stability**.
     - `AudioManager` uses larger default buffers.
-    - `MixerStreamSource` uses relaxed pacing (hard limit up to 10s during buffering).
-    - Result: Latency is higher (~4s) to prevent playback stalls or "underruns" due to OS driver variances, ensuring smooth continuous playback at the cost of control responsiveness.
+    - `MixerStreamSource` uses larger internal chunks.
+    - Result: Latency is higher to prevent playback stalls.
 - **Safe Mode (Offline Rendering):**
-  - **Architecture:** `AudioRenderer` class uses `AudioProcessor` to render the entire mix to a temporary WAV file *before* playback.
-  - **Use Case:** Fallback for low-end devices or when realtime mixing causes skipping.
-  - **Windows Specifics:** Updates to WAV header are handled via `FileMode.append` to ensuring atomic writes.
+  - **Architecture:** `AudioRenderer` class uses `AudioProcessor` (Legacy Dart wrapper) to render. *Note: Need to verify if this is still compatible with new Native structure.*
 
 ## 4. UI / UX ("Dark Studio" Aesthetic)
 ### A. Layout Responsivo & Performance

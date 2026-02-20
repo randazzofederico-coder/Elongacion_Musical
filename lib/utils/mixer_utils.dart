@@ -42,3 +42,20 @@ void initializeMixerTracks(LiveMixer mixer, List<TrackModel> tracks) {
     }
     debugPrint("MixerUtils: Native Tracks Initialized");
 }
+
+/// Helper to convert Float List back to ByteData (16-bit PCM)
+Uint8List floatToBytes(List<double> samples) {
+  final buffer = Uint8List(samples.length * 2);
+  final view = ByteData.view(buffer.buffer);
+  
+  for (int i = 0; i < samples.length; i++) {
+      double s = samples[i];
+      if (s > 1.0) s = 1.0;
+      if (s < -1.0) s = -1.0;
+      
+      int pcm = (s * 32767).toInt();
+      view.setInt16(i * 2, pcm, Endian.little);
+  }
+  
+  return buffer;
+}

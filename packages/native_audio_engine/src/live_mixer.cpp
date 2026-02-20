@@ -2,26 +2,49 @@
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "live_mixer.h"
+#include "soundtouch/include/SoundTouch.h"
 
 using namespace std;
+using namespace soundtouch;
 
 // Forward declaration of callback wrapper
 void data_callback_wrapper(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
     auto mixer = static_cast<LiveMixer*>(pDevice->pUserData);
     if (mixer) {
         mixer->process(static_cast<float*>(pOutput), frameCount);
-        
-        // Atomic update is now handled inside process() to track _currentPosition (wrapped)
-        // instead of linear hardware frames.
     }
 }
 
 LiveMixer::LiveMixer() {
+    // Initialize SoundTouch
+    SoundTouch* st = new SoundTouch();
+    st->setSampleRate(44100);
+    st->setChannels(2);
+    st->setTempo(1.0f);
+    st->setPitch(1.0f);
+    st->setRate(1.0f);
+    
+    // --- REALTIME OPTIMIZATIONS (Option 1) ---
+    // Reduce processing time to prevent Android audio buffer underruns
+    st->setSetting(SETTING_USE_QUICKSEEK, 1);     // Use quick seek algorithm
+    st->setSetting(SETTING_SEQUENCE_MS, 40);      // Default 82ms -> 40ms (faster chunks)
+    st->setSetting(SETTING_SEEKWINDOW_MS, 15);    // Default 28ms -> 15ms (less lookahead)
+    st->setSetting(SETTING_OVERLAP_MS, 8);        // Default 8ms -> Keep 8ms for smoothness
+
+    
+    _soundTouch = st;
+    _mixBuffer.resize(1024 * 2); // default capacity
+
     // initialize miniaudio
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;
     config.playback.channels = 2; // Stereo
     config.sampleRate        = 44100; // Fixed for now, or settable?
+    
+    // NATIVE BUFFER TUNING FOR ANDROID UNDERRUNS
+    config.periodSizeInMilliseconds = 20; // 20ms period to give SoundTouch breathing room
+    config.periods = 3; // triple buffering for safety
+    
     config.dataCallback      = data_callback_wrapper;
     config.pUserData         = this;
 
@@ -37,6 +60,10 @@ LiveMixer::~LiveMixer() {
     if (_deviceInit) {
         ma_device_uninit(&_device);
     }
+    
+    if (_soundTouch) {
+        delete static_cast<SoundTouch*>(_soundTouch);
+    }
 
     // Cleanup tracks
     for (auto const& [key, val] : _tracks) {
@@ -44,6 +71,7 @@ LiveMixer::~LiveMixer() {
     }
     _tracks.clear();
 }
+
 
 void LiveMixer::startPlayback() {
     if (_deviceInit) {
@@ -145,7 +173,10 @@ void LiveMixer::setLoop(int64_t startSample, int64_t endSample, bool enabled) {
 void LiveMixer::seek(int64_t positionSample) {
     std::lock_guard<std::mutex> lock(_mutex);
     _currentPosition = positionSample;
-    _atomicFramesWritten.store(_currentPosition, std::memory_order_release);
+    
+    if (_soundTouch) {
+        static_cast<SoundTouch*>(_soundTouch)->clear();
+    }
     
     // Also reset atomic counter to match visual seek? 
     // Wait, atomic counter is "Frames Written To Hardware". 
@@ -181,6 +212,7 @@ void LiveMixer::seek(int64_t positionSample) {
     // _atomicPosition.store(_currentPosition, memory_order_relaxed);
     
     // I will implement `_atomicPosition` shadow variable.
+    _atomicFramesWritten.store(_currentPosition, std::memory_order_release);
 }
 
 int64_t LiveMixer::getPosition() {
@@ -195,25 +227,23 @@ int64_t LiveMixer::getPosition() {
     // In `process`, I will update it to match `_currentPosition`.
 }
 
-int LiveMixer::process(float* outputBuffer, int numFrames) {
-    // std::lock_guard<std::mutex> lock(_mutex); // Mutex might cause glitch if UI locks it for long.
-    // But we need mutex for `_tracks` map modification.
-    // Ideally use try_lock or lock-free queue for commands.
-    // For now, standard mutex is risky but `LiveMixer` was already doing it.
-    
-    // To minimize blocking, we should copy active tracks ref? 
-    // Or just be fast.
-    
+void LiveMixer::setSpeed(float speed) {
     std::lock_guard<std::mutex> lock(_mutex);
+    _speed = speed;
+    if (_soundTouch) {
+        static_cast<SoundTouch*>(_soundTouch)->setTempo(speed);
+    }
+}
+
+// Internal mixing logic (Raw audio from tracks)
+void LiveMixer::_mixInternal(float* outputBuffer, int numFrames) {
+    // Assumes mutex is ALREADY LOCKED by caller (process)
     
     // Clear buffer (silence)
     memset(outputBuffer, 0, numFrames * 2 * sizeof(float)); // Stereo output
 
     if (_tracks.empty()) {
-        // Even if empty, we write silence and advance time? 
-        // If playing "Silence", yes.
-        // If "Stopped", process won't be called (stopPlayback).
-        return numFrames; 
+        return; 
     }
 
     for (int i = 0; i < numFrames; i++) {
@@ -271,8 +301,80 @@ int LiveMixer::process(float* outputBuffer, int numFrames) {
         
         _currentPosition++;
     }
+}
+
+int LiveMixer::process(float* outputBuffer, int numFrames) {
+    std::lock_guard<std::mutex> lock(_mutex);
     
-    // Update Atomic Shadow for UI (Sample-Accurate Read Pointer)
+    // --- 1.0x SOUNDTOUCH BYPASS OVERRIDE ---
+    // If speed is practically 1.0, bypass SoundTouch and its WSOLA artifacts entirely.
+    bool bypassSoundTouch = std::abs(_speed - 1.0f) < 0.001f;
+    
+    if (bypassSoundTouch) {
+        // Direct Mixing to Output Buffer
+        _mixInternal(outputBuffer, numFrames);
+        
+        // Ensure SoundTouch is clear for when we switch back
+        if (_soundTouch) {
+           static_cast<SoundTouch*>(_soundTouch)->clear();
+        }
+    } else {
+        // --- SOUNDTOUCH TIME-STRETCHING PATH ---
+        if (!_soundTouch) return 0;
+        
+        SoundTouch* st = static_cast<SoundTouch*>(_soundTouch);
+        
+        int samplesReceived = 0;
+        int maxIt = 100; // Safety break
+        
+        // OPTION 4: Dynamic Micro-Block Processing
+        // Force SoundTouch to ingest data in microscopic chunks.
+        // This spreads CPU usage evenly over callbacks rather than blocking the thread with huge 2048-frame injestions.
+        const int MAX_CHUNK_FRAMES = 512; 
+        
+        while (samplesReceived < numFrames && maxIt-- > 0) {
+            // How much do we STILL need?
+            int neededFrames = numFrames - samplesReceived;
+            
+            // Try receive what's currently available in SoundTouch's output buffer
+            int got = st->receiveSamples(outputBuffer + (samplesReceived * 2), neededFrames);
+            samplesReceived += got;
+            
+            // If we got all we need for this miniaudio callback, BREAK IMMEDIATELY.
+            // Do not keep digesting data if we are full. This yields the CPU back to Android.
+            if (samplesReceived >= numFrames) break;
+            
+            // We still need more frames because SoundTouch is empty. 
+            // Ingest a SMALL chunk from our tracks.
+            int chunkFrames = MAX_CHUNK_FRAMES; 
+            
+            // Optional heuristic: If speed is very high, we might need slightly more data to yield output, 
+            // but keep it capped to prevent spikes.
+            if (_speed > 1.0f) {
+                chunkFrames = (int)(MAX_CHUNK_FRAMES * _speed);
+                if (chunkFrames > 1024) chunkFrames = 1024; // Hard cap
+            }
+            
+            if (_mixBuffer.size() < chunkFrames * 2) {
+                _mixBuffer.resize(chunkFrames * 2);
+            }
+            
+            // Mix original tracks
+            _mixInternal(_mixBuffer.data(), chunkFrames);
+            
+            // Feed to SoundTouch
+            st->putSamples(_mixBuffer.data(), chunkFrames);
+            
+            // Loop repeats: next iteration will try to receiveSamples again.
+        }
+        
+        // Fill remaining with silence if we somehow failed to generate enough (e.g. max iterations reached)
+        if (samplesReceived < numFrames) {
+             memset(outputBuffer + (samplesReceived * 2), 0, (numFrames - samplesReceived) * 2 * sizeof(float));
+        }
+    }
+    
+    // Update Atomic Shadow for UI
     _atomicFramesWritten.store(_currentPosition, std::memory_order_release);
     
     return numFrames;
@@ -341,6 +443,10 @@ extern "C" {
     
     EXPORT int64_t live_mixer_get_atomic_position(void* mixer) {
         return static_cast<LiveMixer*>(mixer)->getAtomicPosition();
+    }
+
+    EXPORT void live_mixer_set_speed(void* mixer, float speed) {
+        static_cast<LiveMixer*>(mixer)->setSpeed(speed);
     }
 }
 

@@ -7,7 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'package:elongacion_musical/models/track_model.dart';
-import 'package:elongacion_musical/services/audio_processor.dart';
+import 'package:elongacion_musical/models/track_model.dart';
+// import 'package:elongacion_musical/services/audio_processor.dart'; // Removed
 import 'package:native_audio_engine/live_mixer.dart';
 import 'package:elongacion_musical/utils/wav_header_utils.dart';
 import 'package:elongacion_musical/utils/mixer_utils.dart';
@@ -40,7 +41,8 @@ class MixerStreamSource extends StreamAudioSource {
   bool _needsTrackUpdate = false; 
   
   // Persistent Audio Processor
-  late final AudioProcessor _processor;
+  // Removed AudioProcessor - Native side handles it now directly in liveMixer.process
+  // late final AudioProcessor _processor;
 
   MixerStreamSource(this.tracks, this.totalSamples, this.sampleRate, {
     required this.getMasterVolume,
@@ -50,18 +52,14 @@ class MixerStreamSource extends StreamAudioSource {
   }) {
       initializeMixerTracks(_liveMixer, tracks);
       
-      // Initialize Processor
-      _processor = AudioProcessor();
-      _processor.setChannels(_numChannels);
-      _processor.setSampleRate(sampleRate);
-      _processor.setTempo(_currentTempo);
+      // Initialize Native Speed
+      _liveMixer.setSpeed(_currentTempo);
   }
   
 
   void setTempo(double tempo) {
     _currentTempo = tempo;
-    // Native mixer doesn't do tempo (SoundTouch does). 
-    // We will apply tempo in Dart AFTER getting mixed chunk or integreate later.
+    _liveMixer.setSpeed(tempo);
   }
   
   // -- Control Pass-throughs --
@@ -95,7 +93,6 @@ class MixerStreamSource extends StreamAudioSource {
   
   void dispose() {
     _liveMixer.dispose();
-    _processor.dispose();
   }
   
   // --- NATIVE PLAYBACK CONTROL ---
@@ -131,8 +128,6 @@ class MixerStreamSource extends StreamAudioSource {
   // Sync Map: Maps AudioPlayer's Linear Frame -> Mixer's Internal Wrapped Frame
   final Map<int, int> _syncProbe = {};
 
-  // --- SYNC LOOKUP ---
-  // --- SYNC LOOKUP ---
   // --- SYNC LOOKUP ---
   Duration getHeardPosition(Duration playerPosition) {
       if (sampleRate == 0) return Duration.zero;
@@ -252,20 +247,13 @@ class MixerStreamSource extends StreamAudioSource {
 
        int currentFrame = dataStartByte ~/ (_numChannels * _bytesPerSample);
        _liveMixer.seek(currentFrame);
-
-       // Also clear processor state on seek
-       _processor.clear();
      }
-
-     // Ensure processor settings are up to date (tempo might have changed)
-     _processor.setTempo(_currentTempo);
 
      try {
        final int bytesPerSecond = sampleRate * _numChannels * _bytesPerSample;
 
        // Loop generation
        while (endByte == null || offset < endByte) {
-
 
           // --- SYNC PROBE ---
           // Record: At linear frame X, Mixer is at frame Y
@@ -296,18 +284,11 @@ class MixerStreamSource extends StreamAudioSource {
           // Call Native Mixer (returns interleaved stereo)
           List<double> mixedChunk = _liveMixer.process(inputFramesNeeded);
 
-          // Update Linear Counter
-          // _totalGeneratedFrames += inputFramesNeeded; // This was for mixer output frames
-
-          // Process (Tempo/Pitch) - Optional, kept for speed control
-          List<double> processedFloats = _processor.process(mixedChunk);
-
-
           // Update Linear Counter after processing (SoundTouch changes frame count)
-          localTotalFrames += processedFloats.length ~/ _numChannels;
+          localTotalFrames += mixedChunk.length ~/ _numChannels; // Should be inputFramesNeeded
 
-          if (processedFloats.isNotEmpty) {
-             Uint8List outputBytes = AudioProcessor.floatToBytes(processedFloats);
+          if (mixedChunk.isNotEmpty) {
+             Uint8List outputBytes = floatToBytes(mixedChunk);
 
              // Check Bounds if endByte is set
              if (endByte != null) {
@@ -327,12 +308,6 @@ class MixerStreamSource extends StreamAudioSource {
           } else {
              // processor empty?
           }
-
-          // If we want to emulate end-of-file for finite track when NOT LOOPING internally?
-          // The native mixer returns silence if past end and no loop.
-          // We can check mixer position?
-          // If returned buffer is silence?
-
        }
      } catch (e) {
         debugPrint("Generate error: $e");

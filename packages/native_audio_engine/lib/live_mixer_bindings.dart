@@ -189,8 +189,10 @@ class LiveMixerBindings {
   late final _start = _lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('live_mixer_start');
   late final _stop = _lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('live_mixer_stop');
   late final _getAtomicPosition = _lib.lookupFunction<Int64 Function(Pointer<Void>), int Function(Pointer<Void>)>('live_mixer_get_atomic_position');
+  late final _setSpeed = _lib.lookupFunction<Void Function(Pointer<Void>, Float), void Function(Pointer<Void>, double)>('live_mixer_set_speed');
 
   void start(Pointer<Void> mixer) => _start(mixer);
   void stop(Pointer<Void> mixer) => _stop(mixer);
   int getAtomicPosition(Pointer<Void> mixer) => _getAtomicPosition(mixer);
+  void setSpeed(Pointer<Void> mixer, double speed) => _setSpeed(mixer, speed);
 }

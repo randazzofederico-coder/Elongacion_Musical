@@ -39,6 +39,8 @@ public:
     void startPlayback();
     void stopPlayback();
     int64_t getAtomicPosition(); // Returns frames played (hardware compensated)
+    
+    void setSpeed(float speed);
 
     // Audio Processing
     // mix into outputBuffer (interleaved stereo)
@@ -65,6 +67,9 @@ private:
    int64_t _loopStart = 0;
    int64_t _loopEnd = 0;
 
+   // Internal mixing logic (raw, no speed)
+   void _mixInternal(float* outputBuffer, int numFrames);
+
    // Solo logic helper
    bool _anySolo = false;
    void _updateAnySolo();
@@ -74,6 +79,17 @@ private:
    bool _deviceInit = false;
    std::atomic<int64_t> _atomicFramesWritten{0};
    
+   // --- SOUNDTOUCH ---
+   void* _soundTouch = nullptr; // Void* to avoid forcing C++ dependency in header if not needed, but here we can include it.
+   // Actually, since this is a private member of a C++ class not exported in DLL interface directly (only via C wrappers), 
+   // we can use forward declaration or void* to keep compilation cleaner/faster, or just include it.
+   // Wrapper used "soundtouch/include/SoundTouch.h".
+   // Let's use void* and cast in cpp to minimize header mess, or include if we want unique_ptr.
+   // Simpler: void* _soundTouch; 
+   
+   float _speed = 1.0f;
+   std::vector<float> _mixBuffer; // Intermediate buffer for mixing before SoundTouch
+
    static void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 };
 

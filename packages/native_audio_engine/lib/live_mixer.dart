@@ -113,4 +113,9 @@ class LiveMixer {
      if (_isDisposed) return 0;
      return _bindings.getAtomicPosition(_handle);
   }
+  
+  void setSpeed(double speed) {
+     if (_isDisposed) return;
+     _bindings.setSpeed(_handle, speed);
+  }
 }
