@@ -107,7 +107,8 @@ lib/
 - **Playback Strategy:** `MixerStreamSource` delegates control to `LiveMixer`.
   - **Status:** **ACTIVE**. Mixing, Time-Stretching, and Timing are handled exclusively by C++.
   - **Data Path:** `Float32` optimized. WAV -> Memory -> FFI -> C++ `LiveMixer`.
-  - **Mixer Pipeline:** `Tracks` -> `Summing` -> `Vocoder (Time Stretch)` -> `Miniaudio Output`.
+  - **Mixer Pipeline:** `Tracks` -> `Routing (Solo-in-Place)` -> `Summing` -> `Vocoder (Time Stretch)` -> `Miniaudio Output`.
+  - **Routing Logic:** Implements professional "Solo-in-Place". Supports multiple concurrent Solos. If any track has Solo active, the engine overrides all Mute states and only mixes the soloed tracks. If no Solo is active, track Mute states are respected natively.
 - **Timing & Synchronization (The "Atomic Clock"):**
   - **Source of Truth:** An atomic frame counter in the C++ audio callback.
   - **UI Sync:** Dart polls this atomic counter at 60fps via `Ticker` in `WaveformSeekBar`.

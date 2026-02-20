@@ -236,8 +236,13 @@ void LiveMixer::_mixInternal(float* outputBuffer, int numFrames) {
         
         // Iterate tracks
         for (auto const& [key, track] : _tracks) {
-             if (track->muted) continue;
-             if (_anySolo && !track->solo) continue;
+             // Solo-in-place logic: 
+             // If any track is soloed, ONLY soloed tracks play (mute is ignored)
+             if (_anySolo) {
+                 if (!track->solo) continue;
+             } else {
+                 if (track->muted) continue;
+             }
              
              int64_t framesAvailable = static_cast<int64_t>(track->data.size()) / track->channels;
              

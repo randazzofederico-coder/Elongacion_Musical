@@ -18,7 +18,7 @@ class TransportSection extends StatelessWidget {
           top: BorderSide(color: AppColors.border, width: 1),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0), // Reduced margins
       child: Row(
         children: [
           // Play/Pause
@@ -44,7 +44,7 @@ class TransportSection extends StatelessWidget {
                 );
              }
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8), // Reduced
           
           // Stop
           _TransportButton(
@@ -53,7 +53,7 @@ class TransportSection extends StatelessWidget {
             activeColor: Colors.red, // Not used when inactive but consistent
             onPressed: () => mixer.stop(),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4), // Reduced
 
           // Loop Toggle
           _TransportButton(
@@ -62,7 +62,7 @@ class TransportSection extends StatelessWidget {
              activeColor: AppColors.accentCyan,
              onPressed: () => mixer.toggleLoop(),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8), // Reduced
 
           // Speed / Master Control
           Expanded(
@@ -96,8 +96,8 @@ class _TransportButton extends StatelessWidget {
     return GestureDetector(
       onTap: onPressed,
       child: Container(
-        width: 42, // Slightly smaller to fit 3 buttons nicely
-        height: 42,
+        width: 40, // Slightly smaller to fit 3 buttons nicely
+        height: 40,
         decoration: BoxDecoration(
           color: isActive ? activeColor.withValues(alpha: 0.2) : const Color(0xFF252525),
           borderRadius: BorderRadius.circular(4),
@@ -112,7 +112,7 @@ class _TransportButton extends StatelessWidget {
         child: Icon(
           icon,
           color: isActive ? activeColor : Colors.white70,
-          size: 24, // Slightly smaller icon
+          size: 22, // Slightly smaller icon
         ),
       ),
     );

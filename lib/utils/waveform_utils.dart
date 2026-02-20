@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'package:elongacion_musical/models/track_model.dart';
 
-List<List<double>> generateMasterWaveform(List<TrackModel> tracks, String? soloTrackId) {
+List<List<double>> generateMasterWaveform(List<TrackModel> tracks) {
     if (tracks.isEmpty) {
        return [];
     }
@@ -21,15 +21,16 @@ List<List<double>> generateMasterWaveform(List<TrackModel> tracks, String? soloT
     List<double> masterL = List.filled(points, 0.0);
     List<double> masterR = List.filled(points, 0.0);
     
-    List<TrackModel> activeTracks = tracks;
+    bool anySolo = tracks.any((t) => t.isSolo);
     
-    // Handle Solo
-    if (soloTrackId != null) {
-      activeTracks = activeTracks.where((t) => t.id == soloTrackId).toList();
-    }
-
-    for (var track in activeTracks) {
-      if (track.isMuted) continue;
+    for (var track in tracks) {
+      // Solo-in-place logic
+      if (anySolo) {
+         if (!track.isSolo) continue;
+      } else {
+         if (track.isMuted) continue;
+      }
+      
       if (track.waveformData.isEmpty) continue;
 
       double vol = track.volume;

@@ -83,8 +83,7 @@ class AudioManager {
   double get masterVolume => _masterVolume;
 
   // -- Solo --
-  String? _soloTrackId;
-  String? get soloTrackId => _soloTrackId;
+  // (Handling moved entirely to Tracks, backend manages `anySolo`)
 
   // -- Loading --
   Future<void> loadTracks(List<Map<String, String>> trackConfigs) async {
@@ -314,24 +313,9 @@ class AudioManager {
   void toggleSolo(String id) {
      final track = _tracks.firstWhere((t) => t.id == id, orElse: () => throw Exception("Track not found"));
      
-     if (_soloTrackId == id) {
-        // Toggle OFF
-        _soloTrackId = null;
-        track.isSolo = false;
-        _source?.setSolo(id, false);
-     } else {
-        // Toggle ON (Exclusive solo)
-        if (_soloTrackId != null) {
-           // Unsolo previous
-            final prev = _tracks.firstWhere((t) => t.id == _soloTrackId);
-            prev.isSolo = false;
-            _source?.setSolo(prev.id, false);
-        }
-        
-        _soloTrackId = id;
-        track.isSolo = true;
-        _source?.setSolo(id, true);
-     }
+     track.isSolo = !track.isSolo;
+     _source?.setSolo(id, track.isSolo);
+     
      _notifyDirty();
   }
   

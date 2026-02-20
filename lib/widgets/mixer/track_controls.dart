@@ -37,9 +37,9 @@ class TrackControls extends StatelessWidget {
         children: [
           // Pan Knob (Top of controls)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            padding: const EdgeInsets.symmetric(vertical: 4.0), // Reduced
             child: Transform.scale(
-              scale: 0.8, // Make it slightly smaller
+              scale: 0.65, // Made it smaller to save vertical space
               child: KnobControl(
                 value: track.pan,
                 onChanged: onPanChanged,
@@ -50,35 +50,21 @@ class TrackControls extends StatelessWidget {
             ),
           ),
           
-          // VOLUME CONTROL: Fader or Knob
+          // VOLUME CONTROL: Fader
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: useKnobForVolume 
-                ? Center(
-                    child: Transform.scale(
-                       scale: 0.9,
-                       child: KnobControl(
-                          value: track.volume,
-                          onChanged: onVolumeChanged,
-                          onChangeEnd: onVolumeChangeEnd,
-                          min: 0.0,
-                          max: 1.0, 
-                          label: "VOL",
-                       ),
-                    ),
-                  )
-                : FaderControl(
-                    volume: track.volume,
-                    onChanged: onVolumeChanged,
-                    onChangeEnd: onVolumeChangeEnd,
-                  ),
+              padding: const EdgeInsets.symmetric(vertical: 4.0), // Reduced
+              child: FaderControl(
+                volume: track.volume,
+                onChanged: onVolumeChanged,
+                onChangeEnd: onVolumeChangeEnd,
+              ),
             ),
           ),
           
           // Buttons (Mute / Solo)
            Container(
-             padding: const EdgeInsets.only(bottom: 8),
+             padding: const EdgeInsets.only(bottom: 6), // Reduced
              child: Column(
                children: [
                  // MUTE
@@ -86,7 +72,7 @@ class TrackControls extends StatelessWidget {
                    onTap: onMuteToggle,
                    child: Container(
                      width: 30, // Compact
-                     height: 24,
+                     height: 22, // Compact
                      margin: const EdgeInsets.only(bottom: 4),
                      decoration: BoxDecoration(
                        color: track.isMuted ? AppColors.accentRed : AppColors.surfaceHighlight,
@@ -94,7 +80,7 @@ class TrackControls extends StatelessWidget {
                        border: Border.all(color: Colors.black54),
                      ),
                      alignment: Alignment.center,
-                     child: const Text("M", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                     child: const Text("M", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
                    ),
                  ),
                  
@@ -103,14 +89,14 @@ class TrackControls extends StatelessWidget {
                    onTap: onSoloToggle,
                    child: Container(
                      width: 30, // Compact
-                     height: 24,
+                     height: 22, // Compact
                      decoration: BoxDecoration(
                        color: track.isSolo ? AppColors.accentAmber : AppColors.surfaceHighlight,
                        borderRadius: BorderRadius.circular(3),
                        border: Border.all(color: Colors.black54),
                      ),
                      alignment: Alignment.center,
-                     child: Text("S", style: TextStyle(color: track.isSolo ? Colors.black : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
+                     child: Text("S", style: TextStyle(color: track.isSolo ? Colors.black : Colors.white60, fontWeight: FontWeight.bold, fontSize: 11)),
                    ),
                  ),
                ],

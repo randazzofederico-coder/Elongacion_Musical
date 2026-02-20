@@ -22,20 +22,43 @@ class MasterControl extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: Colors.black54),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!isCompact) const Icon(Icons.speed, color: Colors.grey, size: 18),
-          if (!isCompact) const SizedBox(width: 8),
-          Text(
-            'TEMPO: ${currentSpeed.toStringAsFixed(2)}x',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold, 
-              fontSize: 12, 
-              color: Colors.white70,
-              letterSpacing: 1.0
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  if (!isCompact) const Icon(Icons.speed, color: Colors.grey, size: 16),
+                  if (!isCompact) const SizedBox(width: 4),
+                  Text(
+                    'TEMPO: ${currentSpeed.toStringAsFixed(2)}x',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold, 
+                      fontSize: isCompact ? 10 : 12, 
+                      color: Colors.white70,
+                      letterSpacing: 1.0
+                    ),
+                  ),
+                ],
+              ),
+              Flexible(
+                child: TextButton(
+                  onPressed: () => onSpeedChanged(1.0),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    minimumSize: const Size(0, 20),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('RESET', style: TextStyle(fontSize: 10, color: Colors.white54)),
+                ),
+              ),
+            ],
           ),
-          Expanded(
+          SizedBox(
+            height: 24, // Compact slider height
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 activeTrackColor: Colors.cyanAccent,
@@ -53,14 +76,6 @@ class MasterControl extends StatelessWidget {
                 onChanged: onSpeedChanged,
               ),
             ),
-          ),
-          TextButton(
-            onPressed: () => onSpeedChanged(1.0),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: const Size(0, 30),
-            ),
-            child: const Text('RESET', style: TextStyle(fontSize: 10, color: Colors.white54)),
           ),
         ],
       ),

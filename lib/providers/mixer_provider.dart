@@ -48,7 +48,6 @@ class MixerProvider with ChangeNotifier {
      _cachedTracks = List.from(_audioManager.tracks);
      _cachedMasterWaveform = null; // Invalidate waveform too
   }
-  String? get soloTrackId => _audioManager.soloTrackId;
   
   double get masterVolume => _audioManager.masterVolume;
 
@@ -257,7 +256,7 @@ class MixerProvider with ChangeNotifier {
        return [];
     }
     
-    _cachedMasterWaveform = generateMasterWaveform(_audioManager.tracks, soloTrackId);
+    _cachedMasterWaveform = generateMasterWaveform(_audioManager.tracks);
     return _cachedMasterWaveform!;
   }
 

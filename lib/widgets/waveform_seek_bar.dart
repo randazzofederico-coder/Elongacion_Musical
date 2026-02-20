@@ -156,7 +156,9 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final height = 100.0; // Taller fixed height for waveform
+        // Responsive height based on screen size, clamped for sanity
+        final mediaHeight = MediaQuery.sizeOf(context).height;
+        final height = (mediaHeight * 0.12).clamp(40.0, 80.0);
 
         return Listener(
           onPointerDown: (event) {
@@ -229,7 +231,7 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
               
               // Time Labels only
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

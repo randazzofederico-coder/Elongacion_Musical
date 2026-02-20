@@ -40,7 +40,7 @@ class TrackStrip extends StatelessWidget {
       builder: (context, child) {
         return Container(
           width: width, // Dynamic width
-          margin: const EdgeInsets.symmetric(horizontal: 2),
+          margin: const EdgeInsets.symmetric(horizontal: 1), // Reduced margin
           decoration: BoxDecoration(
             color: AppColors.surface, 
             border: Border.all(color: AppColors.border, width: 1),
@@ -53,7 +53,7 @@ class TrackStrip extends StatelessWidget {
             children: [
               // 1. Track Name (Top - Full Width)
               Container(
-                 height: 24,
+                 height: width < 50 ? 18 : 24, // Responsive height
                  alignment: Alignment.center,
                  color: Colors.black45, // Keep semi-transparent for overlay feel
                  padding: const EdgeInsets.symmetric(horizontal: 2),

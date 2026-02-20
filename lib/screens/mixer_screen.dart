@@ -51,9 +51,11 @@ class _MixerScreenState extends State<MixerScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Column(
-          children: [
-            // Status/Header Bar
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2.0), // Added lateral margin
+          child: Column(
+            children: [
+              // Status/Header Bar
             StudioHeader(
                title: widget.exercise.title,
                isOfflineMode: mixer.isOfflineMode,
@@ -77,23 +79,16 @@ class _MixerScreenState extends State<MixerScreen> {
                           builder: (context, constraints) {
                             final width = constraints.maxWidth;
                             final bool showWaveform = (width > 600) && mixer.showWaveforms;
-                            final bool isShortScreen = constraints.maxHeight < 500;
                             
                             // Calculate Strip Widths
-                            // Optimization: "Entran 6 faders" -> 5 Track + 1 Master
-                            // If Mobile (!showWaveform), force fit all tracks + master
-                            
                             double trackWidth;
                             double? masterWidth;
                             
                             if (showWaveform) {
                                // DESKTOP/TABLET: Comfortable sizes, Master fixed
-                               // MasterStrip has 8px left margin. So occupies masterWidth + 8.
                                double masterOccupied = 120 + 8;
                                masterWidth = 120;
                                
-                               // Remaining for tracks
-                               // Each track occupies trackWidth + 4 (2px margin each side)
                                double remaining = width - masterOccupied;
                                if (remaining < 0) remaining = 0;
                                
@@ -104,20 +99,17 @@ class _MixerScreenState extends State<MixerScreen> {
                             } else {
                                // MOBILE: Fit Everything
                                int totalStrips = mixer.tracks.length + 1; // +1 for Master
-                               // Avoid division by zero
                                if (totalStrips < 1) totalStrips = 1; 
                                
-                               // Calculate equal SLOT width (including margins)
                                double slotWidth = width / totalStrips; 
                                
-                               // Subtract margins from the Slot to get the Content Width
-                               // Track: margin horizontal 2 => 4px total
-                               trackWidth = slotWidth - 4;
+                               // The TrackStrip itself has `margin: EdgeInsets.symmetric(horizontal: 1)` => 2px
+                               trackWidth = slotWidth - 2; 
                                
-                               // Master: margin left 8 => 8px total
-                               masterWidth = slotWidth - 8;
+                               // The MasterSection doesn't have an internal margin the same way in its main container,
+                               // But it often expects some width. Let's give it the same slot width.
+                               masterWidth = slotWidth;
                                
-                               // Safety Clamp
                                if (trackWidth < 30) trackWidth = 30;
                                if (masterWidth < 30) masterWidth = 30;
                             }
@@ -130,7 +122,7 @@ class _MixerScreenState extends State<MixerScreen> {
                                     child: TrackListSection(
                                       showWaveform: showWaveform,
                                       itemWidth: trackWidth,
-                                      useKnobForVolume: isShortScreen,
+                                      useKnobForVolume: false, // Always use faders
                                     ),
                                 ),
                                 
@@ -143,7 +135,7 @@ class _MixerScreenState extends State<MixerScreen> {
                             );
                           }
                         ),
-            ),
+              ),
             
             const SizedBox(height: 16), // Subtle margin between Stems and Ruler
 
@@ -186,6 +178,7 @@ class _MixerScreenState extends State<MixerScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 }

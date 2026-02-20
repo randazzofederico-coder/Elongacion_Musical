@@ -48,7 +48,7 @@ class TrackListSection extends StatelessWidget {
                 },
                 onMuteToggle: () => mixer.toggleTrackMute(track.id),
                 onSoloToggle: () => mixer.toggleSolo(track.id),
-                isSoloed: mixer.soloTrackId == track.id,
+                isSoloed: track.isSolo,
               ),
             );
           },
