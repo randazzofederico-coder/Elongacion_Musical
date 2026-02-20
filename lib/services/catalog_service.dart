@@ -76,6 +76,11 @@ class CatalogService {
         id: 'i_c1_e$index', 
         title: 'Ejercicio $exNum', 
         type: ExerciseType.instrument, 
+        bpm: 140,
+        timeSignatureNumerator: 3,
+        timeSignatureDenominator: 4,
+        preWaitMeasures: 1,
+        countInMeasures: 2,
         tracks: [
           TrackData(id: 'fl', name: 'Flauta', assetPath: '$basePath/flauta.wav'),
           TrackData(id: 'pn', name: 'Piano', assetPath: '$basePath/piano.wav'),
@@ -91,6 +96,11 @@ class CatalogService {
       id: 'i_c1_duo',
       title: 'Dúo',
       type: ExerciseType.instrument,
+      bpm: 140,
+      timeSignatureNumerator: 3,
+      timeSignatureDenominator: 4,
+      preWaitMeasures: 1,
+      countInMeasures: 2,
       tracks: [
         TrackData(id: 'fl1', name: 'Flauta 1', assetPath: '$duoPath/flauta1.wav'),
         TrackData(id: 'fl2', name: 'Flauta 2', assetPath: '$duoPath/flauta2.wav'),

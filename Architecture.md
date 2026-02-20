@@ -139,21 +139,25 @@ lib/
 ### A. Layout Responsivo & Performance
 - **Visual Integration:** Unificación bajo un tema oscuro (`#121212`) simulando hardware (DAW/Consola).
 - **Studio Header:** Barra de estado superior integrada, reemplazando la AppBar nativa.
-- **Transport Panel:** Control de transporte inferior integrado en el chasis, sin tarjetas flotantes.
+- **Mixer Screen Vertical Flow:**
+  - `Header`: App controls and status.
+  - `Stems/Console`: Flexible list expanding to fill the variable vertical space.
+  - `WaveformSeekBar`: Fixed horizontal zoomable canvas.
+  - `Transport`: Unified bottom bar (Play, Stop, Loop Toggle, Tempo Slider).
 - **Split-UI Pattern:** Separación de componentes estáticos (`TrackListSection`) de dinámicos (`MasterSection`).
   - `TrackListSection`: Solo se reconstruye ante cambios estructurales (Reorder, Mute/Solo).
   - `MasterSection`: Se reconstruye 60fps con el `positionStream` para el medidor y seekbar.
 - **Auto-Fit:** Los canales se ajustan automáticamente al ancho de pantalla disponible.
 - **Pixel-Perfect Alignment:** El Fader del Master alinea exactamente con los Faders de canal.
-- **Grid:** Estructura visual clara: Header -> Waveform -> Pan -> Fader -> Mute/Solo.
 
 ### B. Componentes Avanzados
 - **WaveformSeekBar (New):**
   - **Visualization:** Draws the Master Mix waveform as a background.
+  - **Semantic LOD:** Ruler dynamically drops beat markers and offsets measure labels when zoomed out.
   - **Interaction:**
-    - **Tap/Slide:** Seek playback position.
-    - **Hold (Long Press):** Grab Loop Handles (Start/End) to adjust loop region.
-  - **Feedback:** Haptic feedback when grabbing handles.
+    - **Multi-Touch:** Pinch-to-zoom (1x-50x) and two-finger pan/scroll.
+    - **Tap:** Instant precision seek.
+    - **Loop Handles:** Drag ends to adjust. Adaptive snap to beat/measure based on zoom.
 - **Long-Throw Faders:** Control preciso de volumen con escala dB.
 - **Panning:** Distribución estéreo L/R real.
 

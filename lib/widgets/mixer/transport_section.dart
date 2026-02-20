@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:elongacion_musical/constants/app_colors.dart';
 import 'package:elongacion_musical/providers/mixer_provider.dart';
-import 'package:elongacion_musical/widgets/waveform_seek_bar.dart';
+import 'package:elongacion_musical/widgets/master_control.dart';
 
 class TransportSection extends StatelessWidget {
   const TransportSection({super.key});
@@ -53,39 +53,23 @@ class TransportSection extends StatelessWidget {
             activeColor: Colors.red, // Not used when inactive but consistent
             onPressed: () => mixer.stop(),
           ),
+          const SizedBox(width: 8),
+
+          // Loop Toggle
+          _TransportButton(
+             icon: Icons.loop,
+             isActive: mixer.isLooping,
+             activeColor: AppColors.accentCyan,
+             onPressed: () => mixer.toggleLoop(),
+          ),
           const SizedBox(width: 16),
 
-          // Waveform Seek Bar
+          // Speed / Master Control
           Expanded(
-            child: StreamBuilder<Duration?>(
-              stream: mixer.durationStream,
-              initialData: mixer.duration,
-              builder: (context, durationSnap) {
-                final duration = durationSnap.data ?? Duration.zero;
-                return StreamBuilder<Duration>(
-                  stream: mixer.positionStream,
-                  builder: (context, posSnap) {
-                     final position = posSnap.data ?? Duration.zero;
-                     
-                     // Use the cached master waveform
-                     return WaveformSeekBar(
-                        duration: duration,
-                        position: position,
-                        waveformData: mixer.masterWaveformData,
-                        isLoopEnabled: mixer.isLooping,
-                        loopStart: mixer.loopStart,
-                        loopEnd: mixer.loopEnd,
-                        onSeek: (pos) => mixer.seek(pos),
-                        onLoopToggle: (_) => mixer.toggleLoop(),
-                        onLoopRangeChanged: (start, end) => mixer.setLoopRange(start, end),
-                        onLoopRangeChangeEnd: (start, end) {
-                           mixer.setLoopRange(start, end);
-                           mixer.commitLoopRange();
-                        },
-                     );
-                  }
-                );
-              }
+            child: MasterControl(
+              currentSpeed: mixer.globalSpeed,
+              onSpeedChanged: mixer.setGlobalSpeed,
+              isCompact: true,
             ),
           ),
         ],
@@ -112,8 +96,8 @@ class _TransportButton extends StatelessWidget {
     return GestureDetector(
       onTap: onPressed,
       child: Container(
-        width: 48,
-        height: 48,
+        width: 42, // Slightly smaller to fit 3 buttons nicely
+        height: 42,
         decoration: BoxDecoration(
           color: isActive ? activeColor.withValues(alpha: 0.2) : const Color(0xFF252525),
           borderRadius: BorderRadius.circular(4),
@@ -128,7 +112,7 @@ class _TransportButton extends StatelessWidget {
         child: Icon(
           icon,
           color: isActive ? activeColor : Colors.white70,
-          size: 28,
+          size: 24, // Slightly smaller icon
         ),
       ),
     );

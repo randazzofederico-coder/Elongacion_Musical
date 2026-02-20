@@ -7,6 +7,7 @@ import 'package:elongacion_musical/widgets/studio_header.dart';
 import 'package:elongacion_musical/widgets/mixer/track_list_section.dart';
 import 'package:elongacion_musical/widgets/mixer/master_section.dart';
 import 'package:elongacion_musical/widgets/mixer/transport_section.dart';
+import 'package:elongacion_musical/widgets/waveform_seek_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -23,12 +24,7 @@ class _MixerScreenState extends State<MixerScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final tracks = widget.exercise.tracks.map((t) => {
-        'id': t.id,
-        'name': t.name,
-        'path': t.assetPath,
-      }).toList();
-      context.read<MixerProvider>().loadExercise(tracks);
+      context.read<MixerProvider>().loadExercise(widget.exercise);
     });
   }
 
@@ -70,15 +66,9 @@ class _MixerScreenState extends State<MixerScreen> {
                ),
             ),
             
-            // Top: Speed Control
-
-            MasterControl(
-              currentSpeed: mixer.globalSpeed,
-              onSpeedChanged: mixer.setGlobalSpeed,
-            ),
-            
-            // Middle: Console Area (Tracks + Master)
+            // Top: Console Area (Tracks + Master)
             Expanded(
+              flex: 1,
               child: mixer.isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : mixer.tracks.isEmpty
@@ -154,6 +144,42 @@ class _MixerScreenState extends State<MixerScreen> {
                           }
                         ),
             ),
+            
+            const SizedBox(height: 16), // Subtle margin between Stems and Ruler
+
+            // Middle: Waveform Area (Fixed height, full width)
+            StreamBuilder<Duration?>(
+                stream: mixer.durationStream,
+                initialData: mixer.duration,
+                builder: (context, durationSnap) {
+                  final duration = durationSnap.data ?? Duration.zero;
+                  return StreamBuilder<Duration>(
+                    stream: mixer.positionStream,
+                    builder: (context, posSnap) {
+                       final position = posSnap.data ?? Duration.zero;
+                       
+                       return WaveformSeekBar(
+                          duration: duration,
+                          position: position,
+                          waveformData: mixer.masterWaveformData,
+                          isLoopEnabled: mixer.isLooping,
+                          loopStart: mixer.loopStart,
+                          loopEnd: mixer.loopEnd,
+                          bpm: mixer.currentExercise?.bpm,
+                          timeSignatureNumerator: mixer.currentExercise?.timeSignatureNumerator,
+                          preWaitMeasures: mixer.currentExercise?.preWaitMeasures ?? 0,
+                          countInMeasures: mixer.currentExercise?.countInMeasures ?? 0,
+                          onSeek: (pos) => mixer.seek(pos),
+                          onLoopRangeChanged: (start, end) => mixer.setLoopRange(start, end),
+                          onLoopRangeChangeEnd: (start, end) {
+                             mixer.setLoopRange(start, end);
+                             mixer.commitLoopRange();
+                          },
+                       );
+                    }
+                  );
+                }
+              ),
 
             // Bottom: Transport Controls
             const TransportSection(),

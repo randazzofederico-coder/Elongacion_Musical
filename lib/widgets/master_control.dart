@@ -3,27 +3,29 @@ import 'package:flutter/material.dart';
 class MasterControl extends StatelessWidget {
   final double currentSpeed;
   final ValueChanged<double> onSpeedChanged;
+  final bool isCompact;
 
   const MasterControl({
     super.key,
     required this.currentSpeed,
     required this.onSpeedChanged,
+    this.isCompact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
+      margin: isCompact ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: isCompact ? const EdgeInsets.symmetric(horizontal: 8) : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: isCompact ? null : BoxDecoration(
         color: const Color(0xFF252525),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: Colors.black54),
       ),
       child: Row(
         children: [
-          const Icon(Icons.speed, color: Colors.grey, size: 18),
-          const SizedBox(width: 8),
+          if (!isCompact) const Icon(Icons.speed, color: Colors.grey, size: 18),
+          if (!isCompact) const SizedBox(width: 8),
           Text(
             'TEMPO: ${currentSpeed.toStringAsFixed(2)}x',
             style: const TextStyle(

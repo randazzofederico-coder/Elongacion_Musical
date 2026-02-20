@@ -21,12 +21,22 @@ class Exercise {
   final String title;
   final ExerciseType type;
   final List<TrackData> tracks;
+  final int? bpm;
+  final int? timeSignatureNumerator;
+  final int? timeSignatureDenominator;
+  final int? preWaitMeasures;
+  final int? countInMeasures;
 
   const Exercise({
     required this.id,
     required this.title,
     required this.type,
     required this.tracks,
+    this.bpm,
+    this.timeSignatureNumerator,
+    this.timeSignatureDenominator,
+    this.preWaitMeasures = 0,
+    this.countInMeasures = 0,
   });
 }
 

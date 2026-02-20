@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:elongacion_musical/providers/mixer_provider.dart';
 import 'package:elongacion_musical/widgets/waveform/waveform_painter.dart';
+import 'package:elongacion_musical/widgets/waveform/loop_ruler_painter.dart';
 
 class WaveformSeekBar extends StatefulWidget {
   final Duration duration;
@@ -17,6 +18,10 @@ class WaveformSeekBar extends StatefulWidget {
   final ValueChanged<bool>? onLoopToggle;
   final Function(Duration start, Duration end)? onLoopRangeChanged;
   final Function(Duration start, Duration end)? onLoopRangeChangeEnd;
+  final int? bpm;
+  final int? timeSignatureNumerator;
+  final int preWaitMeasures;
+  final int countInMeasures;
 
   const WaveformSeekBar({
     super.key,
@@ -30,6 +35,10 @@ class WaveformSeekBar extends StatefulWidget {
     this.onLoopToggle,
     this.onLoopRangeChanged,
     this.onLoopRangeChangeEnd,
+    this.bpm,
+    this.timeSignatureNumerator,
+    this.preWaitMeasures = 0,
+    this.countInMeasures = 0,
   });
 
   @override
@@ -46,6 +55,15 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
   bool _isDraggingLoopEnd = false;
   Duration? _dragLoopStart;
   Duration? _dragLoopEnd;
+
+  // Zoom & Pan state
+  double _zoomLevel = 1.0;
+  double _scrollOffset = 0.0;
+  
+  double _baseZoomLevel = 1.0;
+  double _initialScrollOffset = 0.0;
+  Offset _initialFocalPoint = Offset.zero;
+  bool _isInteractingWithRuler = false;
 
   @override
   void initState() {
@@ -71,6 +89,32 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
   void dispose() {
     _ticker.dispose();
     super.dispose();
+  }
+  
+  double get _msPerBeat {
+    if (widget.bpm != null && widget.bpm! > 0) {
+      return 60000.0 / widget.bpm!;
+    }
+    return 0; // Means no snapping
+  }
+
+  double _snapToGrid(double ms, double totalMs, double viewWidth) {
+    final double beatMs = _msPerBeat;
+    if (beatMs <= 0) return ms;
+
+    final double msPerMeasure = beatMs * (widget.timeSignatureNumerator ?? 4);
+    final double virtualWidth = viewWidth * _zoomLevel;
+    final double pixelsPerMeasure = (msPerMeasure / totalMs) * virtualWidth;
+
+    // Use measure snapping if zoomed out (e.g. less than 30 pixels per measure)
+    if (pixelsPerMeasure < 30) {
+        double snapped = (ms / msPerMeasure).round() * msPerMeasure;
+        return snapped.clamp(0.0, totalMs);
+    } else {
+        // Normal beat snapping
+        double snapped = (ms / beatMs).round() * beatMs;
+        return snapped.clamp(0.0, totalMs);
+    }
   }
   
   @override
@@ -110,44 +154,40 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final height = 60.0; // Fixed height for waveform
+        final height = 100.0; // Taller fixed height for waveform
 
-        return Column(
-          children: [
-            // Waveform & Interaction Area
-            GestureDetector(
-              // Tap to Seek
-              onTapUp: (details) => _handleTap(details, width, totalMilliseconds),
-              
-              // Standard Drag -> Seek
-              onHorizontalDragStart: (details) => _handleSeekDragStart(details, width, totalMilliseconds),
-              onHorizontalDragUpdate: (details) => _handleSeekDragUpdate(details, width, totalMilliseconds),
-              onHorizontalDragEnd: (details) => _handleSeekDragEnd(details),
-
-              // Long Press -> Loop Handle Drag
-              onLongPressStart: (details) => _handleLongPressStart(details, width, totalMilliseconds),
-              onLongPressMoveUpdate: (details) => _handleLongPressUpdate(details, width, totalMilliseconds),
-              onLongPressEnd: (details) => _handleLongPressEnd(details),
-              
-              child: Container(
-                height: height,
-                width: width,
-                color: Colors.black26, // Background
-                child: CustomPaint(
-                  painter: WaveformPainter(
-                    waveformData: widget.waveformData,
-                    position: Duration(milliseconds: currentMilliseconds.toInt()),
-                    duration: widget.duration,
-                    color: Colors.cyanAccent,
-                    isLoopEnabled: widget.isLoopEnabled,
-                    loopStart: _dragLoopStart ?? widget.loopStart,
-                    loopEnd: _dragLoopEnd ?? widget.loopEnd,
+        return GestureDetector(
+          onScaleStart: (details) => _handleScaleStart(details, width, totalMilliseconds),
+          onScaleUpdate: (details) => _handleScaleUpdate(details, width, totalMilliseconds),
+          onScaleEnd: (details) => _handleScaleEnd(details),
+          onTapUp: (details) => _handleTap(details, width, totalMilliseconds),
+          child: Column(
+            children: [
+              if (widget.bpm != null && widget.bpm! > 0 && widget.timeSignatureNumerator != null && widget.timeSignatureNumerator! > 0)
+                _buildLoopRuler(width, totalMilliseconds),
+              // Waveform Display (Clipped to prevent drawing over transport)
+              ClipRect(
+                child: Container(
+                  height: height,
+                  width: width,
+                  color: Colors.black26, // Background
+                  child: CustomPaint(
+                    painter: WaveformPainter(
+                      waveformData: widget.waveformData,
+                      position: Duration(milliseconds: currentMilliseconds.toInt()),
+                      duration: widget.duration,
+                      color: Colors.cyanAccent,
+                      isLoopEnabled: widget.isLoopEnabled,
+                      loopStart: _dragLoopStart ?? widget.loopStart,
+                      loopEnd: _dragLoopEnd ?? widget.loopEnd,
+                      zoomLevel: _zoomLevel,
+                      scrollOffset: _scrollOffset,
+                    ),
                   ),
                 ),
               ),
-            ),
-            
-            // Time Labels & Loop Toggle
+              
+              // Time Labels only
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
               child: Row(
@@ -158,37 +198,6 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
                     style: const TextStyle(fontSize: 12, color: Colors.white70, fontFamily: "monospace"),
                   ),
                    
-                  // Loop Toggle Button
-                  InkWell(
-                     onTap: () {
-                        if (widget.onLoopToggle != null) {
-                           widget.onLoopToggle!(!widget.isLoopEnabled);
-                        }
-                     },
-                     borderRadius: BorderRadius.circular(16),
-                     child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                           color: widget.isLoopEnabled ? Colors.cyanAccent.withValues(alpha: 0.2) : Colors.transparent,
-                           borderRadius: BorderRadius.circular(12),
-                           border: Border.all(color: widget.isLoopEnabled ? Colors.cyanAccent : Colors.white24),
-                        ),
-                        child: Row(
-                           children: [
-                               Icon(Icons.loop, size: 14, color: widget.isLoopEnabled ? Colors.cyanAccent : Colors.white54),
-                               const SizedBox(width: 4),
-                               Text(widget.isLoopEnabled ? "LOOP ON" : "LOOP", 
-                                  style: TextStyle(
-                                     fontSize: 10, 
-                                     color: widget.isLoopEnabled ? Colors.cyanAccent : Colors.white54,
-                                     fontWeight: FontWeight.bold
-                                  )
-                               ),
-                           ],
-                        ),
-                     ),
-                  ),
-
                   Text(
                     _formatDuration(widget.duration),
                     style: const TextStyle(fontSize: 12, color: Colors.white70, fontFamily: "monospace"),
@@ -197,67 +206,130 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
               ),
             ),
           ],
-        );
-      },
-    );
+        ),
+      );
+    },
+  );
   }
 
-  // --- SEEK DRAG ---
-  void _handleSeekDragStart(DragStartDetails details, double width, double totalMs) {
-      // If we are already handling a long press, ignore standard drag?
-      // Actually standard drag might fire first. 
-      // But we want "Hold to manage bar".
-      // Let's allow immediate seek on drag.
+  // --- LOOP RULER ---
+  Widget _buildLoopRuler(double width, double totalMs) {
+     return Container(
+        height: 24, // Taller for better touch target
+        width: width,
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E1E1E),
+          border: Border(bottom: BorderSide(color: Colors.white24, width: 1)),
+        ),
+        child: CustomPaint(
+           painter: LoopRulerPainter(
+              bpm: widget.bpm!,
+              timeSignatureTop: widget.timeSignatureNumerator!,
+              preWaitMeasures: widget.preWaitMeasures,
+              countInMeasures: widget.countInMeasures,
+              duration: widget.duration,
+              loopStart: _dragLoopStart ?? widget.loopStart,
+              loopEnd: _dragLoopEnd ?? widget.loopEnd,
+              isLoopEnabled: widget.isLoopEnabled,
+              zoomLevel: _zoomLevel,
+              scrollOffset: _scrollOffset,
+           ),
+        ),
+     );
+  }
+
+  // --- TRANSFORMS ---
+  double _getMsFromLocalX(double localX, double viewWidth, double totalMs) {
+      double virtualWidth = viewWidth * _zoomLevel;
+      double absoluteX = localX + _scrollOffset;
+      if (absoluteX < 0) absoluteX = 0;
+      if (absoluteX > virtualWidth) absoluteX = virtualWidth;
       
-      final double touchPercent = details.localPosition.dx / width;
-      final double touchMs = touchPercent * totalMs;
-      _dragPosition = Duration(milliseconds: touchMs.toInt());
-      setState(() {});
+      double ms = (absoluteX / virtualWidth) * totalMs;
+      // When tracking seek or drag, we don't necessarily snap immediately? Wait, snapping happens in _snapToGrid.
+      return ms;
   }
 
-  void _handleSeekDragUpdate(DragUpdateDetails details, double width, double totalMs) {
-     if (_isDraggingLoopStart || _isDraggingLoopEnd) return; // Don't seek if loop dragging active (safety)
-
-     final double deltaPercent = details.primaryDelta! / width;
-     final double totalMsDelta = deltaPercent * totalMs;
-     final currentMs = (_dragPosition?.inMilliseconds.toDouble() ?? widget.position.inMilliseconds.toDouble());
-     final newMs = (currentMs + totalMsDelta).clamp(0.0, totalMs);
-     _dragPosition = Duration(milliseconds: newMs.toInt());
-     setState(() {});
+  // --- SCALE GESTURES (Zoom & Pan & Single Drag) ---
+  void _handleScaleStart(ScaleStartDetails details, double width, double totalMs) {
+      if (details.pointerCount == 1) {
+          // Identify if it's Ruler or Waveform
+          _isInteractingWithRuler = (details.localFocalPoint.dy <= 24.0) && widget.isLoopEnabled;
+          if (_isInteractingWithRuler) {
+             _handleLoopDragStart(details.localFocalPoint, width, totalMs);
+          } else {
+             // Start seek drag
+             double ms = _getMsFromLocalX(details.localFocalPoint.dx, width, totalMs);
+             _dragPosition = Duration(milliseconds: ms.toInt().clamp(0, totalMs.toInt()));
+             setState(() {});
+          }
+      } else if (details.pointerCount >= 2) {
+          _baseZoomLevel = _zoomLevel;
+          _initialScrollOffset = _scrollOffset;
+          _initialFocalPoint = details.localFocalPoint;
+      }
+  }
+  void _handleScaleUpdate(ScaleUpdateDetails details, double width, double totalMs) {
+      if (details.pointerCount == 1) {
+          if (_isInteractingWithRuler) {
+             _handleLoopDragUpdate(details.localFocalPoint, width, totalMs);
+          } else {
+             // Update seek drag
+             double ms = _getMsFromLocalX(details.localFocalPoint.dx, width, totalMs);
+             _dragPosition = Duration(milliseconds: ms.toInt().clamp(0, totalMs.toInt()));
+             setState(() {});
+          }
+      } else if (details.pointerCount >= 2) {
+          // Zoom and Pan
+          double newZoom = (_baseZoomLevel * details.scale).clamp(1.0, 50.0);
+          
+          double virtualXStart = _initialFocalPoint.dx + _initialScrollOffset;
+          double virtualXNew = virtualXStart * (newZoom / _baseZoomLevel);
+          // Account for pan distance simply by using details.localFocalPoint.dx
+          double newScrollOffset = virtualXNew - details.localFocalPoint.dx;
+          
+          double maxScroll = (width * newZoom) - width;
+          
+          setState(() {
+              _zoomLevel = newZoom;
+              _scrollOffset = newScrollOffset.clamp(0.0, maxScroll >= 0 ? maxScroll : 0.0);
+          });
+      }
   }
 
-  void _handleSeekDragEnd(DragEndDetails details) {
-     if (_isDraggingLoopStart || _isDraggingLoopEnd) return;
-
-     if (_dragPosition != null) {
-        if (widget.onSeek != null) {
-           widget.onSeek!(_dragPosition!);
-        }
-        // Snap the visual position so when drag state clears, it doesn't jump back
-        _visualPosition = _dragPosition!;
-     }
-     _dragPosition = null;
-     setState(() {});
+  void _handleScaleEnd(ScaleEndDetails details) {
+      if (_isInteractingWithRuler) {
+          _handleLoopDragEnd();
+      } else if (_dragPosition != null) {
+          // End Seek Drag
+          if (widget.onSeek != null) {
+             widget.onSeek!(_dragPosition!);
+          }
+          _visualPosition = _dragPosition!;
+          _dragPosition = null;
+          setState(() {});
+      }
+      _isInteractingWithRuler = false;
   }
 
-  // --- LOOP HANDLE LONG PRESS ---
-  void _handleLongPressStart(LongPressStartDetails details, double width, double totalMs) {
+  // --- LOOP HANDLE DRAG (Ruler) ---
+  void _handleLoopDragStart(Offset localPosition, double width, double totalMs) {
     if (!widget.isLoopEnabled) return;
 
-    final double touchPercent = details.localPosition.dx / width;
+    double touchMs = _getMsFromLocalX(localPosition.dx, width, totalMs);
     
-    // Hit test tolerance (Increased for accessibility)
-    final double tolerancePercent = 40.0 / width; 
+    // Hit test tolerance (converted to Ms based on zoom level for consistent physical touch size)
+    final double toleranceMs = (40.0 / (width * _zoomLevel)) * totalMs; 
     
-    final double loopStartPercent = widget.loopStart.inMilliseconds / totalMs;
-    final double loopEndPercent = widget.loopEnd.inMilliseconds / totalMs;
+    final double loopStartMs = widget.loopStart.inMilliseconds.toDouble();
+    final double loopEndMs = widget.loopEnd.inMilliseconds.toDouble();
 
     // Check handles
-    double distStart = (touchPercent - loopStartPercent).abs();
-    double distEnd = (touchPercent - loopEndPercent).abs();
+    double distStart = (touchMs - loopStartMs).abs();
+    double distEnd = (touchMs - loopEndMs).abs();
     
-    bool hitStart = distStart < tolerancePercent;
-    bool hitEnd = distEnd < tolerancePercent;
+    bool hitStart = distStart < toleranceMs;
+    bool hitEnd = distEnd < toleranceMs;
     
     // Reset seek drag if it started accidentally
     _dragPosition = null; 
@@ -276,6 +348,17 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
     } else if (hitEnd) {
        _isDraggingLoopEnd = true;
        _dragLoopEnd = widget.loopEnd;
+    } else {
+       // Optional: Tap in middle creates new loop? Let's keep it simple and just snap to nearest handle if they miss, or do nothing.
+       // Actually, maybe tap creates new loop around that beat?
+       // For now, let's just do nothing if they miss cleanly, or snap the nearest handle if they were close.
+       if (distStart < distEnd) {
+           _isDraggingLoopStart = true;
+           _dragLoopStart = widget.loopStart;
+       } else {
+           _isDraggingLoopEnd = true;
+           _dragLoopEnd = widget.loopEnd;
+       }
     }
     
     if (_isDraggingLoopStart || _isDraggingLoopEnd) {
@@ -285,12 +368,10 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
     }
   }
 
-  void _handleLongPressUpdate(LongPressMoveUpdateDetails details, double width, double totalMs) {
-      // Delta is tricky with LongPressMoveUpdateDetails, uses localPosition relative to start?
-      // It gives `localPosition`. We can calculate absolute position.
-      
-     final double touchPercent = details.localPosition.dx / width;
-     final double newMs = (touchPercent * totalMs).clamp(0.0, totalMs);
+  void _handleLoopDragUpdate(Offset localPosition, double width, double totalMs) {
+      // Calculate absolute position
+     double newMs = _getMsFromLocalX(localPosition.dx, width, totalMs);
+     newMs = _snapToGrid(newMs, totalMs, width);
      
      if (_isDraggingLoopStart) {
         final val = Duration(milliseconds: newMs.toInt());
@@ -312,7 +393,7 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
      setState(() {});
   }
 
-  void _handleLongPressEnd(LongPressEndDetails details) {
+  void _handleLoopDragEnd() {
       if (_isDraggingLoopStart || _isDraggingLoopEnd) {
          if (widget.onLoopRangeChangeEnd != null) {
             widget.onLoopRangeChangeEnd!(_dragLoopStart ?? widget.loopStart, _dragLoopEnd ?? widget.loopEnd);
@@ -327,11 +408,13 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
   }
   
   void _handleTap(TapUpDetails details, double width, double totalMs) {
+     // Identify if we tapped the loop ruler, if so, ignore seek
+     if (details.localPosition.dy <= 24.0 && widget.isLoopEnabled) return;
+
      // Simple seek on tap
-     final double touchPercent = details.localPosition.dx / width;
-     final int newMs = (touchPercent * totalMs).toInt();
+     double newMs = _getMsFromLocalX(details.localPosition.dx, width, totalMs);
      if (widget.onSeek != null) {
-        final newDur = Duration(milliseconds: newMs);
+        final newDur = Duration(milliseconds: newMs.toInt());
         widget.onSeek!(newDur);
         _visualPosition = newDur;
         setState(() {});

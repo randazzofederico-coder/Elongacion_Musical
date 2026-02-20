@@ -4,10 +4,12 @@ import 'package:elongacion_musical/services/audio_manager.dart';
 import 'package:elongacion_musical/services/settings_service.dart';
 import 'package:elongacion_musical/models/track_model.dart';
 import 'package:elongacion_musical/utils/waveform_utils.dart';
+import 'package:elongacion_musical/models/catalog_model.dart';
 
 class MixerProvider with ChangeNotifier {
   final SettingsService _settingsService;
   late final AudioManager _audioManager;
+  Exercise? _currentExercise;
 
   MixerProvider(this._settingsService) {
      _audioManager = AudioManager(_settingsService);
@@ -29,6 +31,7 @@ class MixerProvider with ChangeNotifier {
   Duration get loopEnd => _loopEnd;
 
   SettingsService get settingsService => _settingsService;
+  Exercise? get currentExercise => _currentExercise;
   
   List<TrackModel> _cachedTracks = [];
   List<List<double>>? _cachedMasterWaveform;
@@ -150,8 +153,9 @@ class MixerProvider with ChangeNotifier {
       setStOverlapMs(16);
   }
 
-  Future<void> loadExercise(List<Map<String, String>> tracks) async {
+  Future<void> loadExercise(Exercise exercise) async {
     _isLoading = true;
+    _currentExercise = exercise;
     // Notify to show loading state
     notifyListeners();
     
@@ -161,7 +165,13 @@ class MixerProvider with ChangeNotifier {
       // We might want a method in audioManager to specifically unload/clear if loadTracks doesn't do it fully,
       // but loadTracks typically resets.
       
-      await _audioManager.loadTracks(tracks);
+      final mappedTracks = exercise.tracks.map((t) => {
+        'id': t.id,
+        'name': t.name,
+        'path': t.assetPath,
+      }).toList();
+
+      await _audioManager.loadTracks(mappedTracks);
     } catch (e) {
       debugPrint("Error loading exercise in provider: $e");
     } finally {
