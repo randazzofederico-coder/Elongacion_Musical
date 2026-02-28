@@ -19,19 +19,14 @@ class TrackListSection extends StatelessWidget {
       builder: (context, activeTracks, child) {
         if (activeTracks.isEmpty) return const SizedBox.shrink();
 
-        return ReorderableListView.builder(
+        return ListView.builder(
           scrollDirection: Axis.horizontal,
-          onReorder: (oldIndex, newIndex) {
-             context.read<MixerProvider>().reorderTracks(oldIndex, newIndex);
-          },
-          buildDefaultDragHandles: false, 
           itemCount: activeTracks.length,
           itemBuilder: (context, index) {
             final track = activeTracks[index];
             final mixer = context.read<MixerProvider>();
-            return ReorderableDragStartListener(
+            return KeyedSubtree(
               key: ValueKey(track.id),
-              index: index,
               child: TrackStrip(
                 width: itemWidth,
                 track: track,

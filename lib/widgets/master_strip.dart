@@ -89,26 +89,7 @@ class MasterStrip extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        // 1. Invisible Pan Knob (Top) for Alignment
-                        Visibility(
-                          visible: false, 
-                          maintainSize: true,
-                          maintainAnimation: true,
-                          maintainState: true,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: Transform.scale(
-                              scale: 0.8, 
-                              child: KnobControl(
-                                value: 0,
-                                onChanged: (v){},
-                                label: "PAN",
-                              ),
-                            ),
-                          ),
-                        ),
-                        
-                        // 2. Main Fader (Expanded - Same as TrackStrip)
+                        // 1. Main Fader (Expanded - Same as TrackStrip)
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -120,46 +101,86 @@ class MasterStrip extends StatelessWidget {
                             ),
                           ),
                         ),
-                        
-                        // 3. Invisible Buttons (Bottom) for Alignment
-                         Visibility(
-                           visible: false,
-                           maintainSize: true,
-                           maintainAnimation: true,
-                           maintainState: true,
-                           child: Container(
-                             padding: const EdgeInsets.only(bottom: 8),
-                             child: Column(
-                               children: [
-                                 // MUTE Placeholder
-                                 Container(
-                                   width: 30, 
-                                   height: 24,
-                                   margin: const EdgeInsets.only(bottom: 4),
-                                   decoration: BoxDecoration(
-                                     borderRadius: BorderRadius.circular(3),
-                                     border: Border.all(color: Colors.black54),
-                                   ),
-                                 ),
-                                 
-                                 // SOLO Placeholder
-                                 Container(
-                                   width: 30, 
-                                   height: 24,
-                                   decoration: BoxDecoration(
-                                     borderRadius: BorderRadius.circular(3),
-                                     border: Border.all(color: Colors.black54),
-                                   ),
-                                 ),
-                               ],
-                             ),
-                           ),
-                         ),
+
+
+                        // 3. Metronome Controls (Bottom)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8.0),
+                          child: _MetronomeControls(),
+                        ),
                       ],
                     ),
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetronomeControls extends StatefulWidget {
+  const _MetronomeControls({Key? key}) : super(key: key);
+
+  @override
+  State<_MetronomeControls> createState() => _MetronomeControlsState();
+}
+
+class _MetronomeControlsState extends State<_MetronomeControls> {
+  double _vol34 = 0.5;
+  bool _isOn34 = false;
+
+  double _vol68 = 0.5;
+  bool _isOn68 = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // In TrackStrip:
+    // Pan: ~40px + 8px padding
+    // Mute: 22px + 4px margin
+    // Solo: 22px
+    // Padding bottom: 6px
+    // Total approx: 102px
+    // Let's make metronome area match exactly with tightly packed knobs
+    return Container(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Transform.scale(
+            scale: 0.65,
+            child: KnobControl(
+              value: _vol34,
+              onChanged: (val) {
+                setState(() => _vol34 = val);
+              },
+              min: 0,
+              max: 1,
+              label: _isOn34 ? "3/4 ON" : "3/4 OFF",
+              labelColor: _isOn34 ? AppColors.accentGreen : AppColors.accentRed,
+              onTap: () {
+                setState(() => _isOn34 = !_isOn34);
+              }
+            ),
+          ),
+          const SizedBox(height: 2), // tighter spacing
+          Transform.scale(
+            scale: 0.65,
+            child: KnobControl(
+              value: _vol68,
+              onChanged: (val) {
+                setState(() => _vol68 = val);
+              },
+              min: 0,
+              max: 1,
+              label: _isOn68 ? "6/8 ON" : "6/8 OFF",
+              labelColor: _isOn68 ? AppColors.accentGreen : AppColors.accentRed,
+              onTap: () {
+                setState(() => _isOn68 = !_isOn68);
+              }
             ),
           ),
         ],

@@ -8,6 +8,8 @@ class KnobControl extends StatefulWidget {
   final double min;
   final double max;
   final String label;
+  final Color? labelColor; // Added for explicit ON/OFF colors
+  final VoidCallback? onTap; // Added for tap support
 
   const KnobControl({
     super.key,
@@ -17,6 +19,8 @@ class KnobControl extends StatefulWidget {
     this.min = -1.0,
     this.max = 1.0,
     this.label = "PAN",
+    this.labelColor,
+    this.onTap,
   });
 
   @override
@@ -73,7 +77,9 @@ class _KnobControlState extends State<KnobControl> {
         if (widget.onChangeEnd != null) widget.onChangeEnd!(mid);
       },
       onTap: () {
-        // _showValueDialog(context); // Temporarily identifying if we need this, keeping it simple for now
+        if (widget.onTap != null) {
+          widget.onTap!();
+        }
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -85,7 +91,11 @@ class _KnobControlState extends State<KnobControl> {
           const SizedBox(height: 4),
           Text(
             widget.label, 
-            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)
+            style: TextStyle(
+              fontSize: 9, 
+              fontWeight: FontWeight.bold, 
+              color: widget.labelColor ?? Colors.grey,
+            )
           ),
         ],
       ),

@@ -9,6 +9,7 @@ class AppColors {
   // Accents
   static const Color accentCyan = Colors.cyanAccent;
   static const Color accentRed = Colors.redAccent;
+  static const Color accentGreen = Colors.greenAccent;
   static const Color accentAmber = Colors.amber;
 
   // UI Elements

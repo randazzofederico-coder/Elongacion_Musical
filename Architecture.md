@@ -146,14 +146,15 @@ lib/
 - **Loading State:** Unified loading screen that hides the mixer console and transport until all tracks and native engines are fully initialized to avoid UI jumps.
 - **Mixer Screen Vertical Flow:**
   - `Header`: App controls and status.
-  - `Stems/Console`: Flexible list expanding to fill the variable vertical space.
+  - `Stems/Console`: Flexible list expanding to fill the variable vertical space. Fixed order to prevent accidental restructuring.
   - `WaveformSeekBar`: Fixed horizontal zoomable canvas.
   - `Transport`: Unified bottom bar (Play, Stop, Loop Toggle, Tempo Slider).
 - **Split-UI Pattern:** Separación de componentes estáticos (`TrackListSection`) de dinámicos (`MasterSection`).
-  - `TrackListSection`: Solo se reconstruye ante cambios estructurales (Reorder, Mute/Solo).
+  - `TrackListSection`: Solo se reconstruye ante cambios estructurales (Mute/Solo).
   - `MasterSection`: Se reconstruye 60fps con el `positionStream` para el medidor y seekbar.
 - **Auto-Fit:** Los canales se ajustan automáticamente al ancho de pantalla disponible.
 - **Pixel-Perfect Alignment:** El Fader del Master alinea exactamente con los Faders de canal.
+- **Console Layout:** Vertical bottom-up component hierarchy (Solo -> Mute -> Pan -> Volume) strictly observed in all strips. Master strip matches this metric spacing with metronome sub-mix controls.
 
 ### B. Componentes Avanzados
 - **WaveformSeekBar (New):**

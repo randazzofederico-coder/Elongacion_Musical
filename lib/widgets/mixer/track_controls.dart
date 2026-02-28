@@ -35,7 +35,19 @@ class TrackControls extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          // Pan Knob (Top of controls)
+          // VOLUME CONTROL: Fader (Top)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4.0), // Reduced
+              child: FaderControl(
+                volume: track.volume,
+                onChanged: onVolumeChanged,
+                onChangeEnd: onVolumeChangeEnd,
+              ),
+            ),
+          ),
+          
+          // Pan Knob
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4.0), // Reduced
             child: Transform.scale(
@@ -46,18 +58,6 @@ class TrackControls extends StatelessWidget {
                 label: "PAN",
                 min: -1.0,
                 max: 1.0,
-              ),
-            ),
-          ),
-          
-          // VOLUME CONTROL: Fader
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4.0), // Reduced
-              child: FaderControl(
-                volume: track.volume,
-                onChanged: onVolumeChanged,
-                onChangeEnd: onVolumeChangeEnd,
               ),
             ),
           ),
