@@ -56,4 +56,59 @@ class SettingsService {
   Future<void> setStOverlapMs(int value) async {
     await _prefs.setInt('st_overlap', value);
   }
+
+  // --- Exercise Preferences ---
+  
+  String _exKey(String exerciseId, String key) => '${exerciseId}_$key';
+
+  // Speed
+  double getGlobalSpeed(String exerciseId) => _prefs.getDouble(_exKey(exerciseId, 'speed')) ?? 1.0;
+  Future<void> setGlobalSpeed(String exerciseId, double speed) async {
+    await _prefs.setDouble(_exKey(exerciseId, 'speed'), speed);
+  }
+
+  // Loop State
+  bool getLoopEnabled(String exerciseId) => _prefs.getBool(_exKey(exerciseId, 'loop_enabled')) ?? false;
+  Future<void> setLoopEnabled(String exerciseId, bool enabled) async {
+    await _prefs.setBool(_exKey(exerciseId, 'loop_enabled'), enabled);
+  }
+
+  int getLoopStart(String exerciseId) => _prefs.getInt(_exKey(exerciseId, 'loop_start')) ?? 0;
+  Future<void> setLoopStart(String exerciseId, int microseconds) async {
+    await _prefs.setInt(_exKey(exerciseId, 'loop_start'), microseconds);
+  }
+
+  int getLoopEnd(String exerciseId) => _prefs.getInt(_exKey(exerciseId, 'loop_end')) ?? 0;
+  Future<void> setLoopEnd(String exerciseId, int microseconds) async {
+    await _prefs.setInt(_exKey(exerciseId, 'loop_end'), microseconds);
+  }
+
+  // Master Volume
+  double getMasterVolume(String exerciseId) => _prefs.getDouble(_exKey(exerciseId, 'master_volume')) ?? 1.0;
+  Future<void> setMasterVolume(String exerciseId, double volume) async {
+    await _prefs.setDouble(_exKey(exerciseId, 'master_volume'), volume);
+  }
+
+  // Track Mix State (Track-level)
+  String _trKey(String exerciseId, String trackId, String key) => '${exerciseId}_${trackId}_$key';
+
+  double getTrackVolume(String exerciseId, String trackId) => _prefs.getDouble(_trKey(exerciseId, trackId, 'volume')) ?? 1.0;
+  Future<void> setTrackVolume(String exerciseId, String trackId, double volume) async {
+    await _prefs.setDouble(_trKey(exerciseId, trackId, 'volume'), volume);
+  }
+
+  double getTrackPan(String exerciseId, String trackId) => _prefs.getDouble(_trKey(exerciseId, trackId, 'pan')) ?? 0.0;
+  Future<void> setTrackPan(String exerciseId, String trackId, double pan) async {
+    await _prefs.setDouble(_trKey(exerciseId, trackId, 'pan'), pan);
+  }
+
+  bool getTrackMute(String exerciseId, String trackId) => _prefs.getBool(_trKey(exerciseId, trackId, 'mute')) ?? false;
+  Future<void> setTrackMute(String exerciseId, String trackId, bool mute) async {
+    await _prefs.setBool(_trKey(exerciseId, trackId, 'mute'), mute);
+  }
+
+  bool getTrackSolo(String exerciseId, String trackId) => _prefs.getBool(_trKey(exerciseId, trackId, 'solo')) ?? false;
+  Future<void> setTrackSolo(String exerciseId, String trackId, bool solo) async {
+    await _prefs.setBool(_trKey(exerciseId, trackId, 'solo'), solo);
+  }
 }

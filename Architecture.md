@@ -143,6 +143,7 @@ lib/
 ### A. Layout Responsivo & Performance
 - **Visual Integration:** Unificación bajo un tema oscuro (`#121212`) simulando hardware (DAW/Consola).
 - **Studio Header:** Barra de estado superior integrada, reemplazando la AppBar nativa.
+- **Loading State:** Unified loading screen that hides the mixer console and transport until all tracks and native engines are fully initialized to avoid UI jumps.
 - **Mixer Screen Vertical Flow:**
   - `Header`: App controls and status.
   - `Stems/Console`: Flexible list expanding to fill the variable vertical space.
@@ -183,11 +184,15 @@ lib/
   - Uses `TextOverflow.ellipsis` for graceful truncation on extremely narrow screens.
 
 ### D. Settings & Preferences
-- **Service:** `SettingsService` persists user choices via `SharedPreferences`.
-- **Features:**
+- **SettingsService:** `SettingsService` persists user choices via `SharedPreferences`.
+- **Global Features:**
   - **Show Waveforms:** Toggles track visualization for performance/preference.
   - **Lock Portrait:** Enforces portrait orientation on supported devices (Mobile/Tablet).
   - **Audio Engine Mode:** Toggles between Realtime and Offline rendering.
+- **Exercise-Specific Preferences:**
+  - Playback configurations (Global Speed, Loop Range, Track Volumes, Panning, Mutes, Solos, and Master Volume) are now automatically saved and synced per `Exercise.id`.
+  - When opening an exercise, the previous state is completely restored.
+  - A "Reset All" option restores the specific exercise back to factory defaults.
 
 ## 6. PERFORMANCE & OPTIMIZATION
 - **Parallel Audio Analysis (Isolates):**

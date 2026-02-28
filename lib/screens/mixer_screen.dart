@@ -1,8 +1,6 @@
 import 'package:elongacion_musical/models/catalog_model.dart';
-import 'package:elongacion_musical/models/track_model.dart';
 import 'package:elongacion_musical/constants/app_colors.dart';
 import 'package:elongacion_musical/providers/mixer_provider.dart';
-import 'package:elongacion_musical/widgets/master_control.dart';
 import 'package:elongacion_musical/widgets/studio_header.dart';
 import 'package:elongacion_musical/widgets/mixer/track_list_section.dart';
 import 'package:elongacion_musical/widgets/mixer/master_section.dart';
@@ -67,77 +65,89 @@ class _MixerScreenState extends State<MixerScreen> {
                  },
                ),
             ),
-            
-            // Top: Console Area (Tracks + Master)
-            Expanded(
-              flex: 1,
-              child: mixer.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : mixer.tracks.isEmpty
-                      ? const Center(child: Text("No tracks loaded"))
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            final width = constraints.maxWidth;
-                            final bool showWaveform = (width > 600) && mixer.showWaveforms;
-                            
-                            // Calculate Strip Widths
-                            double trackWidth;
-                            double? masterWidth;
-                            
-                            if (showWaveform) {
-                               // DESKTOP/TABLET: Comfortable sizes, Master fixed
-                               double masterOccupied = 120 + 8;
-                               masterWidth = 120;
-                               
-                               double remaining = width - masterOccupied;
-                               if (remaining < 0) remaining = 0;
-                               
-                               double slotWidth = remaining / mixer.tracks.length;
-                               trackWidth = slotWidth - 4; // Subtract margins
-                               
-                               if (trackWidth < 80) trackWidth = 80; // Min width for desktop
-                            } else {
-                               // MOBILE: Fit Everything
-                               int totalStrips = mixer.tracks.length + 1; // +1 for Master
-                               if (totalStrips < 1) totalStrips = 1; 
-                               
-                               double slotWidth = width / totalStrips; 
-                               
-                               // The TrackStrip itself has `margin: EdgeInsets.symmetric(horizontal: 1)` => 2px
-                               trackWidth = slotWidth - 2; 
-                               
-                               // The MasterSection doesn't have an internal margin the same way in its main container,
-                               // But it often expects some width. Let's give it the same slot width.
-                               masterWidth = slotWidth;
-                               
-                               if (trackWidth < 30) trackWidth = 30;
-                               if (masterWidth < 30) masterWidth = 30;
-                            }
-
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                // TRACKS
-                                Expanded(
-                                    child: TrackListSection(
-                                      showWaveform: showWaveform,
-                                      itemWidth: trackWidth,
-                                      useKnobForVolume: false, // Always use faders
-                                    ),
-                                ),
-                                
-                                // MASTER STRIP
-                                MasterSection(
-                                  showWaveform: showWaveform,
-                                  width: masterWidth,
-                                ),
-                              ],
-                            );
+            // Rest of the UI or Loading Spinner
+            if (mixer.isLoading)
+              const Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: AppColors.accentCyan),
+                      SizedBox(height: 16),
+                      Text("Cargando pistas...", style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              // Top: Console Area (Tracks + Master)
+              Expanded(
+                flex: 1,
+                child: mixer.tracks.isEmpty
+                    ? const Center(child: Text("No tracks loaded"))
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          final width = constraints.maxWidth;
+                          final bool showWaveform = (width > 600) && mixer.showWaveforms;
+                          
+                          // Calculate Strip Widths
+                          double trackWidth;
+                          double? masterWidth;
+                          
+                          if (showWaveform) {
+                             // DESKTOP/TABLET: Comfortable sizes, Master fixed
+                             double masterOccupied = 120 + 8;
+                             masterWidth = 120;
+                             
+                             double remaining = width - masterOccupied;
+                             if (remaining < 0) remaining = 0;
+                             
+                             double slotWidth = remaining / mixer.tracks.length;
+                             trackWidth = slotWidth - 4; // Subtract margins
+                             
+                             if (trackWidth < 80) trackWidth = 80; // Min width for desktop
+                          } else {
+                             // MOBILE: Fit Everything
+                             int totalStrips = mixer.tracks.length + 1; // +1 for Master
+                             if (totalStrips < 1) totalStrips = 1; 
+                             
+                             double slotWidth = width / totalStrips; 
+                             
+                             // The TrackStrip itself has `margin: EdgeInsets.symmetric(horizontal: 1)` => 2px
+                             trackWidth = slotWidth - 2; 
+                             
+                             // The MasterSection doesn't have an internal margin the same way in its main container,
+                             // But it often expects some width. Let's give it the same slot width.
+                             masterWidth = slotWidth;
+                             
+                             if (trackWidth < 30) trackWidth = 30;
+                             if (masterWidth < 30) masterWidth = 30;
                           }
-                        ),
+
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // TRACKS
+                              Expanded(
+                                  child: TrackListSection(
+                                    showWaveform: showWaveform,
+                                    itemWidth: trackWidth,
+                                    useKnobForVolume: false, // Always use faders
+                                  ),
+                              ),
+                              
+                              // MASTER STRIP
+                              MasterSection(
+                                showWaveform: showWaveform,
+                                width: masterWidth,
+                              ),
+                            ],
+                          );
+                        }
+                      ),
               ),
-            
-            const SizedBox(height: 16), // Subtle margin between Stems and Ruler
+              
+              const SizedBox(height: 16), // Subtle margin between Stems and Ruler
 
             // Middle: Waveform Area (Fixed height, full width)
             StreamBuilder<Duration?>(
@@ -173,12 +183,13 @@ class _MixerScreenState extends State<MixerScreen> {
                 }
               ),
 
-            // Bottom: Transport Controls
-            const TransportSection(),
-          ],
+              // Bottom: Transport Controls
+              const TransportSection(),
+            ],
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 }

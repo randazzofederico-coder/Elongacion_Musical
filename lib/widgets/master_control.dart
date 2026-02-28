@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 class MasterControl extends StatelessWidget {
   final double currentSpeed;
   final ValueChanged<double> onSpeedChanged;
+  final VoidCallback onResetAll;
   final bool isCompact;
 
   const MasterControl({
     super.key,
     required this.currentSpeed,
     required this.onSpeedChanged,
+    required this.onResetAll,
     this.isCompact = false,
   });
 
@@ -46,7 +48,7 @@ class MasterControl extends StatelessWidget {
               ),
               Flexible(
                 child: TextButton(
-                  onPressed: () => onSpeedChanged(1.0),
+                  onPressed: onResetAll,
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     minimumSize: const Size(0, 20),

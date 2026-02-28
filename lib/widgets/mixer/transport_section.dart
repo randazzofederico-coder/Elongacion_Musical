@@ -69,6 +69,7 @@ class TransportSection extends StatelessWidget {
             child: MasterControl(
               currentSpeed: mixer.globalSpeed,
               onSpeedChanged: mixer.setGlobalSpeed,
+              onResetAll: mixer.resetAll,
               isCompact: true,
             ),
           ),
