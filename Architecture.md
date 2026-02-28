@@ -51,14 +51,17 @@
 
 ## 2. ESTRUCTURA DE CARPETAS
 ### Assets de Audio (Data Catalog)
-Estructura jerárquica para evitar conflictos de nombres y permitir carga dinámica.
-- `assets/audio/instrumento/capitulo_N/ejercicio_M/`
-  - Archivos: `flauta.wav`, `piano.wav`, `contrabajo.wav`, `bombo.wav`.
-  - **Convención:**
-    - `piano.wav`: **STEREO** (Mantener espacialidad).
-    - Resto: **MONO** (Para ahorrar espacio y CPU).
-- `assets/audio/instrumento/capitulo_N/duo/`
-  - Archivos: `flauta1.wav`, `flauta2.wav`, `piano.wav`, `contrabajo.wav`, `bombo.wav`.
+Estructura jerárquica para cargar dinámicamente los audios reales.
+- **Nuevos Capítulos (Ej. Capítulo 1 y 2):**
+  - Ubicación: `assets/audio/capitulo N/`
+  - Archivos Ejercicios: Formato `Capitulo N-Ej M-Instrumento.wav` (Instrumentos: `Fl Solista`, `Piano`, `Contrabajo`, `Bombo`).
+  - Archivos Dúos: Formato `Capitulo N-Duo-Instrumento.wav` (Instrumentos: `Fl1`, `Fl2`, `Piano`, `Contrabajo`, `Bombo`).
+- **Capítulos Legacy (Placeholder):**
+  - Ubicación: `assets/audio/Instrumento/capitulo_N/ejercicio_M/` (Para futuras migraciones).
+
+**Convención para Canales:**
+- `Piano`: **STEREO** (Mantener espacialidad para la mezcla final).
+- Resto (`Flauta`, `Contrabajo`, `Bombo`): **MONO** (Para ahorrar RAM y CPU).
 
 ### Navegación (Nueva Arquitectura)
 - **MenuScreen:** Lista principal dividida en secciones (Ritmo vs Instrumento).

@@ -35,12 +35,13 @@ class CatalogService {
      return List.generate(10, (index) {
        final num = index + 1;
        
-       if (num == 1) {
-         // --- REAL DATA FOR CHAPTER 1 ---
-         return _buildChapter1();
+       if (num == 1 || num == 2) {
+         // --- REAL DATA FOR CHAPTERS 1 AND 2 ---
+         int numExercises = num == 1 ? 7 : 6;
+         return _buildInstrumentChapter(num, numExercises);
        }
 
-       // --- PLACEHOLDER FOR CHAPTERS 2-10 ---
+       // --- PLACEHOLDER FOR CHAPTERS 3-10 ---
        // Some exercises
        final List<Exercise> exercises = List.generate(3, (exIndex) => Exercise(
             id: 'i_c${num}_e$exIndex',
@@ -66,14 +67,20 @@ class CatalogService {
     });
   }
 
-  static Chapter _buildChapter1() {
-    // 7 Standard Exercises (Quartet)
-    final List<Exercise> exercises = List.generate(7, (index) {
+  static Chapter _buildInstrumentChapter(int chapterNum, int numExercises) {
+    // Standard Exercises (Quartet)
+    final List<Exercise> exercises = List.generate(numExercises, (index) {
       final exNum = index + 1;
-      final basePath = 'assets/audio/Instrumento/capitulo_1/ejercicio_$exNum';
       
+      String getPath(String instrument) {
+        String exPrefix = 'Ej';
+        if (chapterNum == 1 && exNum == 4) exPrefix = 'Eg';
+        if (chapterNum == 2 && exNum == 1) exPrefix = 'EJ';
+        return 'assets/audio/capitulo $chapterNum/Capitulo $chapterNum-$exPrefix $exNum-$instrument.wav';
+      }
+
       return Exercise(
-        id: 'i_c1_e$index', 
+        id: 'i_c${chapterNum}_e$index', 
         title: 'Ejercicio $exNum', 
         type: ExerciseType.instrument, 
         bpm: 140,
@@ -82,18 +89,19 @@ class CatalogService {
         preWaitMeasures: 1,
         countInMeasures: 2,
         tracks: [
-          TrackData(id: 'fl', name: 'Flauta', assetPath: '$basePath/flauta.wav'),
-          TrackData(id: 'pn', name: 'Piano', assetPath: '$basePath/piano.wav'),
-          TrackData(id: 'cb', name: 'Contrabajo', assetPath: '$basePath/contrabajo.wav'),
-          TrackData(id: 'bb', name: 'Bombo', assetPath: '$basePath/bombo.wav'),
+          TrackData(id: 'fl', name: 'Flauta', assetPath: getPath('Fl Solista')),
+          TrackData(id: 'pn', name: 'Piano', assetPath: getPath('Piano')),
+          TrackData(id: 'cb', name: 'Contrabajo', assetPath: getPath('Contrabajo')),
+          TrackData(id: 'bb', name: 'Bombo', assetPath: getPath('Bombo')),
         ]
       );
     });
 
     // 1 Duo (Quintet with 2 Flutes)
-    const duoPath = 'assets/audio/Instrumento/capitulo_1/duo';
+    String getDuoPath(String instrument) => 'assets/audio/capitulo $chapterNum/Capitulo $chapterNum-Duo-$instrument.wav';
+
     exercises.add(Exercise(
-      id: 'i_c1_duo',
+      id: 'i_c${chapterNum}_duo',
       title: 'Dúo',
       type: ExerciseType.instrument,
       bpm: 140,
@@ -102,17 +110,17 @@ class CatalogService {
       preWaitMeasures: 1,
       countInMeasures: 2,
       tracks: [
-        TrackData(id: 'fl1', name: 'Flauta 1', assetPath: '$duoPath/flauta1.wav'),
-        TrackData(id: 'fl2', name: 'Flauta 2', assetPath: '$duoPath/flauta2.wav'),
-        TrackData(id: 'pn', name: 'Piano', assetPath: '$duoPath/piano.wav'),
-        TrackData(id: 'cb', name: 'Contrabajo', assetPath: '$duoPath/contrabajo.wav'),
-        TrackData(id: 'bb', name: 'Bombo', assetPath: '$duoPath/bombo.wav'),
+        TrackData(id: 'fl1', name: 'Flauta 1', assetPath: getDuoPath('Fl1')),
+        TrackData(id: 'fl2', name: 'Flauta 2', assetPath: getDuoPath('Fl2')),
+        TrackData(id: 'pn', name: 'Piano', assetPath: getDuoPath('Piano')),
+        TrackData(id: 'cb', name: 'Contrabajo', assetPath: getDuoPath('Contrabajo')),
+        TrackData(id: 'bb', name: 'Bombo', assetPath: getDuoPath('Bombo')),
       ]
     ));
 
     return Chapter(
-      id: 'inst_1',
-      title: 'Capítulo 1 - Instrumento',
+      id: 'inst_$chapterNum',
+      title: 'Capítulo $chapterNum - Instrumento',
       description: 'Ejercicios con Instrumento (Real)',
       exercises: exercises,
     );
