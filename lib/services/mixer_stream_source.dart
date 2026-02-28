@@ -52,8 +52,9 @@ class MixerStreamSource extends StreamAudioSource {
   }) {
       initializeMixerTracks(_liveMixer, tracks);
       
-      // Initialize Native Speed
+      // Initialize Native Controls
       _liveMixer.setSpeed(_currentTempo);
+      _liveMixer.setMasterVolume(getMasterVolume());
   }
   
   void setTempo(double tempo) {
@@ -90,9 +91,21 @@ class MixerStreamSource extends StreamAudioSource {
   
   // -- Control Pass-throughs --
   void setVolume(String id, double vol) => _liveMixer.setVolume(id, vol);
+  void setMasterVolume(double vol) => _liveMixer.setMasterVolume(vol);
+  void setMasterMute(bool muted) => _liveMixer.setMasterMute(muted);
+  void setMasterSolo(bool solo) => _liveMixer.setMasterSolo(solo);
   void setPan(String id, double pan) => _liveMixer.setPan(id, pan);
   void setMute(String id, bool muted) => _liveMixer.setMute(id, muted);
   void setSolo(String id, bool solo) => _liveMixer.setSolo(id, solo);
+
+  // -- Metronome Controls --
+  void setMetronomeConfig(int bpm) => _liveMixer.setMetronomeConfig(bpm);
+  void setMetronomeSound(int type, Float32List data) => _liveMixer.setMetronomeSound(type, data);
+  void setMetronomeVolume(double vol34, double vol68) => _liveMixer.setMetronomeVolume(vol34, vol68);
+  void setMetronomeMute(bool mute34, bool mute68) => _liveMixer.setMetronomeMute(mute34, mute68);
+  void setMetronomeSolo(bool solo34, bool solo68) => _liveMixer.setMetronomeSolo(solo34, solo68);
+  void setMetronomePattern(List<int>? pattern34, List<int>? pattern68) => _liveMixer.setMetronomePattern(pattern34, pattern68);
+  void setMetronomePreviewMode(bool enabled) => _liveMixer.setMetronomePreviewMode(enabled);
   
   // Loop Control
   // Loop Control State

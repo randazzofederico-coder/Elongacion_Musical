@@ -77,7 +77,10 @@ lib/
 │   ├── audio_manager.dart     # Gestión de alto nivel. Delega análisis a utils.
 │   └── mixer_stream_source.dart # Motor de mezcla nativo.
 ├── providers/
-│   └── mixer_provider.dart    # ViewModel principal.
+│   ├── mixer_provider.dart          # Facade principal y coordinador.
+│   ├── playback_provider.dart       # (New) Estado de reproducción (Play, Seek, Loop).
+│   ├── track_list_provider.dart     # (New) Estado de la lista de pistas, mute, solo, vol.
+│   └── mixer_settings_provider.dart # (New) Perfiles de Time-Stretching y toggles de UI.
 ├── utils/
 │   ├── audio_analysis_utils.dart # (New) Lógica de decodificación y picos.
 │   ├── mixer_utils.dart          # (New) Inicialización de pistas nativas.
@@ -93,8 +96,11 @@ lib/
     │   ├── master_section.dart
     │   ├── transport_section.dart
     │   └── track_controls.dart   # (New) Controles de pista (Fader, Knob, Mute/Solo).
-    ├── waveform/              # (New) Componentes de visualización.
-    │   └── waveform_painter.dart # (New) Logic de pintado de ondas.
+    ├── waveform/              # (New) Componentes de visualización y control de onda.
+    │   ├── waveform_painter.dart              # Logic de pintado de ondas.
+    │   ├── loop_ruler_painter.dart            # Renderizado del grid musical.
+    │   ├── loop_ruler.dart                    # (New) Renderizado de marcadores y regla.
+    │   └── waveform_interaction_controller.dart # (New) Gestión de estado de gestos y zoom.
     ├── studio_header.dart     # Header customizado.
     ├── track_strip.dart       # Layout del canal individual.
     ├── master_strip.dart      # Layout del canal master.
@@ -110,8 +116,8 @@ lib/
 - **Playback Strategy:** `MixerStreamSource` delegates control to `LiveMixer`.
   - **Status:** **ACTIVE**. Mixing, Time-Stretching, and Timing are handled exclusively by C++.
   - **Data Path:** `Float32` optimized. WAV -> Memory -> FFI -> C++ `LiveMixer`.
-  - **Mixer Pipeline:** `Tracks` -> `Routing (Solo-in-Place)` -> `Summing` -> `Vocoder (Time Stretch)` -> `Miniaudio Output`.
-  - **Routing Logic:** Implements professional "Solo-in-Place". Supports multiple concurrent Solos. If any track has Solo active, the engine overrides all Mute states and only mixes the soloed tracks. If no Solo is active, track Mute states are respected natively.
+  - **Mixer Pipeline:** `Tracks` -> `Routing (Solo-in-Place & Global Solo)` -> `Summing` -> `Vocoder (Time Stretch)` -> `Miniaudio Output`.
+  - **Routing Logic:** Implements professional "Solo-in-Place". Supports multiple concurrent Solos across Musical Tracks and Metrónomos. If any track or metrónomo has Solo active (`Global Solo`), the engine natively overrides all Mute states and only mixes the soloed elements. Master Solo and Mute natively apply to the whole Track bus. This guarantees that UI "Mute" interactions do not destructively alter the users' perfectly tuned fader volumes.
 - **Timing & Synchronization (The "Atomic Clock"):**
   - **Source of Truth:** An atomic frame counter in the C++ audio callback.
   - **UI Sync:** Dart polls this atomic counter at 60fps via `Ticker` in `WaveformSeekBar`.
@@ -139,6 +145,19 @@ lib/
 - **Safe Mode (Offline Rendering):**
   - **Architecture:** `AudioRenderer` class uses `AudioProcessor` (Legacy Dart wrapper) to render. *Note: Need to verify if this is still compatible with new Native structure.*
 
+### 3.2 PROCEDURAL METRONOME
+- **Architecture:** C++ Math-driven procedural click generator. No pre-rendered `.wav` files required per exercise.
+- **Implementation:**
+  - Dart generates single-cycle sine/noise arrays (`Float32List`) with exponential decay and passes them to C++ FFI on boot (`setMetronomeSound`).
+  - `LiveMixer.cpp` calculates eighth-note boundaries based on the `target BPM` and atomic frame position.
+  - A 6-step integer array sequencer dictates the pattern (`1`=High, `2`=Low, `3`=Mid).
+- **Benefits:** Guaranteed sample-accurate sync, extremely low memory, scales perfectly with time-stretching without distorting the clicks.
+
+### 3.3 AUTOMATIC PLAYBACK CONTROL
+- `LiveMixer` locally tracks the `_maxTrackSamples` among all loaded tracks.
+- When `_currentPosition` exceeds this maximum (if loop is disabled), playback is natively halted (`_isPlaying = false`) and silence is generated.
+- `AudioManager` in Dart polls this condition via `sourceDuration` and syncs the UI `PlayerState` back to `completed`.
+
 ## 4. UI / UX ("Dark Studio" Aesthetic)
 ### A. Layout Responsivo & Performance
 - **Visual Integration:** Unificación bajo un tema oscuro (`#121212`) simulando hardware (DAW/Consola).
@@ -157,13 +176,14 @@ lib/
 - **Console Layout:** Vertical bottom-up component hierarchy (Solo -> Mute -> Pan -> Volume) strictly observed in all strips. Master strip matches this metric spacing with metronome sub-mix controls.
 
 ### B. Componentes Avanzados
-- **WaveformSeekBar (New):**
+- **WaveformSeekBar (Refactored):**
   - **Visualization:** Draws the Master Mix waveform as a background. Uses dynamic resolution scaling based on audio duration (density-based parsing) to preserve high visual detail when zooming deep into long tracks.
   - **Semantic LOD:** Ruler dynamically drops beat markers and offsets measure labels when zoomed out.
-  - **Interaction:**
-    - **Multi-Touch:** Pinch-to-zoom (1x-50x) and two-finger pan/scroll. Implements precise hardware pointer tracking via `Listener` to explicitly separate multi-touch navigation sessions from single-touch actions, eliminating erratic playhead jumps upon finger release.
+  - **State Management & Interaction (`WaveformInteractionController`):** 
+    - Extracted all complex multi-touch, pinch-to-zoom, pan, drag, and snapping math into a dedicated `ChangeNotifier` to maintain gesture memory across UI rebuilds `< 200 lines`.
+    - **Multi-Touch:** Pinch-to-zoom (1x-50x) and two-finger pan/scroll. Implements precise hardware pointer tracking via `Listener` to explicitly separate multi-touch navigation sessions from single-touch actions.
     - **Tap:** Instant precision seek.
-    - **Loop Handles:** Drag ends to adjust. Adaptive snap to beat/measure based on zoom.
+    - **Loop Handles:** Handled natively by dragging the yellow bounds on the separated `LoopRuler` UI. Adaptive snap to beat/measure based on zoom.
 - **Long-Throw Faders:** Control preciso de volumen con escala dB.
 - **Panning:** Distribución estéreo L/R real.
 

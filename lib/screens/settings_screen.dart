@@ -1,6 +1,7 @@
 import 'package:elongacion_musical/constants/app_colors.dart';
 import 'package:elongacion_musical/providers/mixer_provider.dart';
 import 'package:elongacion_musical/services/settings_service.dart';
+import 'package:elongacion_musical/widgets/knob_control.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -29,6 +30,96 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Metrónomo',
+                    style: TextStyle(
+                      color: AppColors.primary, 
+                      fontSize: 18, 
+                      fontWeight: FontWeight.bold
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Configura los patrones rítmicos. Toca cada paso para ciclar entre: Mudo, Alto, Bajo, y Medio.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceHighlight.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.divider),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSettingsTrackStrip(
+                        context: context,
+                        label: 'MASTER',
+                        value: mixer.masterVolume,
+                        onChanged: (val) => mixer.setMasterVolume(val),
+                        isMuted: mixer.isMasterMuted,
+                        onMuteToggle: mixer.toggleMasterMute,
+                        isSolo: mixer.isMasterSolo,
+                        onSoloToggle: mixer.toggleMasterSolo,
+                        isActive: true
+                    ),
+                    _buildSettingsTrackStrip(
+                        context: context,
+                        label: '3/4',
+                        value: mixer.metronomeVol34,
+                        onChanged: (val) => mixer.setMetronomeVolume(val, mixer.metronomeVol68),
+                        isMuted: mixer.isMetronome34Muted,
+                        onMuteToggle: mixer.toggleMetronome34Mute,
+                        isSolo: mixer.isMetronome34Solo,
+                        onSoloToggle: mixer.toggleMetronome34Solo,
+                        isActive: mixer.metronomeVol34 > 0,
+                    ),
+                    _buildSettingsTrackStrip(
+                        context: context,
+                        label: '6/8',
+                        value: mixer.metronomeVol68,
+                        onChanged: (val) => mixer.setMetronomeVolume(mixer.metronomeVol34, val),
+                        isMuted: mixer.isMetronome68Muted,
+                        onMuteToggle: mixer.toggleMetronome68Mute,
+                        isSolo: mixer.isMetronome68Solo,
+                        onSoloToggle: mixer.toggleMetronome68Solo,
+                        isActive: mixer.metronomeVol68 > 0,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+              
+              _MetronomeSequencer(
+                 title: 'Patrón 3/4 (o compás simple)',
+                 pattern: widget.settingsService.metronomePattern34,
+                 onChange: (newPat) async {
+                    await widget.settingsService.setMetronomePattern34(newPat);
+                    mixer.reloadMetronomePatterns();
+                 },
+              ),
+              const SizedBox(height: 16),
+              _MetronomeSequencer(
+                 title: 'Patrón 6/8 (o compás compuesto)',
+                 pattern: widget.settingsService.metronomePattern68,
+                 onChange: (newPat) async {
+                    await widget.settingsService.setMetronomePattern68(newPat);
+                    mixer.reloadMetronomePatterns();
+                 },
+              ),
+
+              const Divider(color: AppColors.border, height: 32),
+
               const Text(
                 'User Interface',
                 style: TextStyle(
@@ -175,6 +266,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildSettingsTrackStrip({
+      required BuildContext context,
+      required String label,
+      required double value,
+      required Function(double) onChanged,
+      required bool isMuted,
+      required VoidCallback onMuteToggle,
+      required bool isSolo,
+      required VoidCallback onSoloToggle,
+      required bool isActive,
+      bool hideSolo = false,
+  }) {
+      return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+              KnobControl(
+                  value: value,
+                  onChanged: onChanged,
+                  min: 0,
+                  max: 1,
+                  label: "$label ${isActive ? 'ON' : 'OFF'}",
+                  labelColor: isActive ? AppColors.accentGreen : AppColors.textSecondary,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                      // Mute Button
+                      GestureDetector(
+                          onTap: onMuteToggle,
+                          child: Container(
+                              width: 30,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                  color: isMuted ? AppColors.accentRed : Colors.grey.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                  'M',
+                                  style: TextStyle(
+                                      color: isMuted ? Colors.white : Colors.grey,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                  ),
+                              ),
+                          ),
+                      ),
+                      if (!hideSolo) ...[
+                          const SizedBox(width: 6),
+                          // Solo Button
+                          GestureDetector(
+                              onTap: onSoloToggle,
+                              child: Container(
+                                  width: 30,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                      color: isSolo ? AppColors.accentCyan : Colors.grey.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                      'S',
+                                      style: TextStyle(
+                                          color: isSolo ? Colors.black : Colors.grey,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                      ),
+                                  ),
+                              ),
+                          ),
+                      ],
+                  ],
+              )
+          ],
+      );
+  }
+
   Widget _buildTuningSlider({
     required String title, 
     required double value, 
@@ -271,4 +440,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 } // End Class
-// Removed _currentMode state logic since we use Provider now.
+
+class _MetronomeSequencer extends StatelessWidget {
+  final List<int> pattern;
+  final String title;
+  final Function(List<int>) onChange;
+
+  const _MetronomeSequencer({
+    Key? key,
+    required this.pattern,
+    required this.title,
+    required this.onChange,
+  }) : super(key: key);
+
+  Color _getColorForType(int type) {
+     switch (type) {
+        case 1: return AppColors.accentRed;
+        case 2: return AppColors.accentCyan;
+        case 3: return AppColors.accentGreen;
+        default: return AppColors.surfaceHighlight;
+     }
+  }
+  
+  String _getLabelForType(int type) {
+     switch (type) {
+        case 1: return "ALTO";
+        case 2: return "BAJO";
+        case 3: return "MEDIO";
+        default: return "OFF";
+     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(6, (index) {
+            int currentType = pattern.length > index ? pattern[index] : 0;
+            return GestureDetector(
+              onTap: () {
+                 List<int> newPat = List.from(pattern);
+                 // cycle 0 -> 1 -> 2 -> 3 -> 0
+                 newPat[index] = (currentType + 1) % 4;
+                 onChange(newPat);
+              },
+              child: Container(
+                width: 45,
+                height: 45,
+                decoration: BoxDecoration(
+                  color: currentType == 0 ? AppColors.surface : _getColorForType(currentType).withOpacity(0.2),
+                  border: Border.all(
+                    color: currentType == 0 ? AppColors.border : _getColorForType(currentType),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${index + 1}', 
+                      style: TextStyle(
+                        color: currentType == 0 ? AppColors.textSecondary : Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16
+                      )
+                    ),
+                    if (currentType != 0)
+                      Text(
+                         _getLabelForType(currentType),
+                         style: TextStyle(
+                            color: _getColorForType(currentType),
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                         )
+                      )
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+}

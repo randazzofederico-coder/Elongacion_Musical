@@ -37,6 +37,9 @@ class MasterSection extends StatelessWidget {
                    onVolumeChanged: (vol) => mixer.setMasterVolume(vol),
                    onVolumeChangeEnd: (_) {}, 
                    progress: progress,
+                   metronomeVol34: mixer.metronomeVol34,
+                   metronomeVol68: mixer.metronomeVol68,
+                   onMetronomeChanged: (vol34, vol68) => mixer.setMetronomeVolume(vol34, vol68),
                    showWaveform: showWaveform,
                    width: width,
                  );

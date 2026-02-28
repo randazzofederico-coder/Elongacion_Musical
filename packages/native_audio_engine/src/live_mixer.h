@@ -34,6 +34,9 @@ public:
     void setLoop(int64_t startSample, int64_t endSample, bool enabled);
     void seek(int64_t positionSample);
     int64_t getPosition(); 
+    void setMasterVolume(float volume);
+    void setMasterMute(bool muted);
+    void setMasterSolo(bool solo);
     
     // --- NATIVE OUTPUT CONTROL ---
     void startPlayback();
@@ -43,6 +46,14 @@ public:
     void setSpeed(float speed);
     void setSoundTouchSetting(int settingId, int value);
 
+    // --- METRONOME ---
+    void setMetronomeConfig(int bpm);
+    void setMetronomeSound(int type, const float* data, int numSamples);
+    void setMetronomeVolume(float vol34, float vol68);
+    void setMetronomeMute(bool mute34, bool mute68);
+    void setMetronomeSolo(bool solo34, bool solo68);
+    void setMetronomePattern(const int* pattern34, const int* pattern68);
+    void setMetronomePreviewMode(bool enabled);
     // Audio Processing
     // mix into outputBuffer (interleaved stereo)
     // returns number of frames filled (should match numFrames unless EOS and not looping)
@@ -73,12 +84,48 @@ private:
    float _masterEnvelope = 1.0f;
    float _targetEnvelope = 1.0f;
    
+   // Master Volume
+   float _masterVolume = 1.0f;
+   
    // Internal mixing logic (raw, no speed)
    void _mixInternal(float* outputBuffer, int numFrames);
 
+   // Metronome state
+   int _bpm = 0;
+   float _vol34 = 0.0f;
+   float _vol68 = 0.0f;
+   int _lastEighth = -1;
+   bool _metronomePreviewMode = false;
+
+   // 6-step sequencer (0 = off, 1 = High, 2 = Low, 3 = Noise)
+   int _pattern34[6] = {1, 0, 0, 0, 0, 0}; 
+   int _pattern68[6] = {1, 0, 0, 2, 0, 0};
+
+   struct MetronomeVoice {
+       std::vector<float> data;
+       int currentPointer = -1;
+       float currentVolume = 0.0f;
+   };
+   MetronomeVoice _clickHigh; // type 0
+   MetronomeVoice _clickLow;  // type 1
+   MetronomeVoice _clickNoise;// type 2
+
    // Solo logic helper
    bool _anySolo = false;
+   bool _masterMuted = false;
+   bool _masterSolo = false;
+   bool _metronome34Muted = false;
+   bool _metronome34Solo = false;
+   bool _metronome68Muted = false;
+   bool _metronome68Solo = false;
+   bool _globalAnySolo = false;
+
    void _updateAnySolo();
+   void _updateGlobalSolo();
+   
+   // Track length logic
+   int64_t _maxTrackSamples = 0;
+   void _updateMaxTrackSamples();
    
    // --- MINIAUDIO ---
    ma_device _device;
@@ -101,6 +148,17 @@ private:
 
 extern "C" {
     EXPORT void live_mixer_set_soundtouch_setting(void* mixer, int settingId, int value);
+    
+    EXPORT void live_mixer_set_master_mute(void* mixer, bool muted);
+    EXPORT void live_mixer_set_master_solo(void* mixer, bool solo);
+
+    EXPORT void live_mixer_set_metronome_config(void* mixer, int bpm);
+    EXPORT void live_mixer_set_metronome_sound(void* mixer, int type, const float* data, int numSamples);
+    EXPORT void live_mixer_set_metronome_volume(void* mixer, float vol34, float vol68);
+    EXPORT void live_mixer_set_metronome_mute(void* mixer, bool mute34, bool mute68);
+    EXPORT void live_mixer_set_metronome_solo(void* mixer, bool solo34, bool solo68);
+    EXPORT void live_mixer_set_metronome_pattern(void* mixer, const int* pattern34, const int* pattern68);
+    EXPORT void live_mixer_set_metronome_preview_mode(void* mixer, bool enabled);
 }
 
 #endif // LIVE_MIXER_H

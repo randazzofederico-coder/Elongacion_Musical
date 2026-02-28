@@ -12,6 +12,9 @@ class MasterStrip extends StatelessWidget {
   final double progress; // 0.0 to 1.0
   final bool showWaveform;
   final double? width; // Optional override width
+  final double metronomeVol34;
+  final double metronomeVol68;
+  final Function(double vol34, double vol68) onMetronomeChanged;
 
   const MasterStrip({
     super.key,
@@ -20,6 +23,9 @@ class MasterStrip extends StatelessWidget {
     required this.onVolumeChanged,
     required this.onVolumeChangeEnd,
     required this.progress,
+    required this.metronomeVol34,
+    required this.metronomeVol68,
+    required this.onMetronomeChanged,
     this.showWaveform = true,
     this.width,
   });
@@ -104,9 +110,13 @@ class MasterStrip extends StatelessWidget {
 
 
                         // 3. Metronome Controls (Bottom)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 8.0),
-                          child: _MetronomeControls(),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: _MetronomeControls(
+                             vol34: metronomeVol34,
+                             vol68: metronomeVol68,
+                             onChanged: onMetronomeChanged,
+                          ),
                         ),
                       ],
                     ),
@@ -122,19 +132,22 @@ class MasterStrip extends StatelessWidget {
 }
 
 class _MetronomeControls extends StatefulWidget {
-  const _MetronomeControls({Key? key}) : super(key: key);
+  final double vol34;
+  final double vol68;
+  final Function(double vol34, double vol68) onChanged;
+
+  const _MetronomeControls({
+    Key? key,
+    required this.vol34,
+    required this.vol68,
+    required this.onChanged,
+  }) : super(key: key);
 
   @override
   State<_MetronomeControls> createState() => _MetronomeControlsState();
 }
 
 class _MetronomeControlsState extends State<_MetronomeControls> {
-  double _vol34 = 0.5;
-  bool _isOn34 = false;
-
-  double _vol68 = 0.5;
-  bool _isOn68 = false;
-
   @override
   Widget build(BuildContext context) {
     // In TrackStrip:
@@ -153,34 +166,28 @@ class _MetronomeControlsState extends State<_MetronomeControls> {
           Transform.scale(
             scale: 0.65,
             child: KnobControl(
-              value: _vol34,
+              value: widget.vol34,
               onChanged: (val) {
-                setState(() => _vol34 = val);
+                 widget.onChanged(val, widget.vol68);
               },
               min: 0,
               max: 1,
-              label: _isOn34 ? "3/4 ON" : "3/4 OFF",
-              labelColor: _isOn34 ? AppColors.accentGreen : AppColors.accentRed,
-              onTap: () {
-                setState(() => _isOn34 = !_isOn34);
-              }
+              label: widget.vol34 > 0 ? "3/4 ON" : "3/4 OFF",
+              labelColor: widget.vol34 > 0 ? AppColors.accentGreen : AppColors.accentRed,
             ),
           ),
           const SizedBox(height: 2), // tighter spacing
           Transform.scale(
             scale: 0.65,
             child: KnobControl(
-              value: _vol68,
+              value: widget.vol68,
               onChanged: (val) {
-                setState(() => _vol68 = val);
+                 widget.onChanged(widget.vol34, val);
               },
               min: 0,
               max: 1,
-              label: _isOn68 ? "6/8 ON" : "6/8 OFF",
-              labelColor: _isOn68 ? AppColors.accentGreen : AppColors.accentRed,
-              onTap: () {
-                setState(() => _isOn68 = !_isOn68);
-              }
+              label: widget.vol68 > 0 ? "6/8 ON" : "6/8 OFF",
+              labelColor: widget.vol68 > 0 ? AppColors.accentGreen : AppColors.accentRed,
             ),
           ),
         ],

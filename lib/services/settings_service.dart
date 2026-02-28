@@ -57,6 +57,25 @@ class SettingsService {
     await _prefs.setInt('st_overlap', value);
   }
 
+  // --- Metronome Settings ---
+  List<int> get metronomePattern34 {
+     final saved = _prefs.getStringList('met_pat_34');
+     if (saved == null || saved.length != 6) return [1, 0, 2, 0, 2, 0]; // default: 1 on 1st, 2 on 3rd & 5th eighth
+     return saved.map((e) => int.tryParse(e) ?? 0).toList();
+  }
+  Future<void> setMetronomePattern34(List<int> pattern) async {
+     await _prefs.setStringList('met_pat_34', pattern.map((e) => e.toString()).toList());
+  }
+
+  List<int> get metronomePattern68 {
+     final saved = _prefs.getStringList('met_pat_68');
+     if (saved == null || saved.length != 6) return [1, 0, 0, 2, 0, 0]; // default: 1 on 1st, 2 on 4th eighth
+     return saved.map((e) => int.tryParse(e) ?? 0).toList();
+  }
+  Future<void> setMetronomePattern68(List<int> pattern) async {
+     await _prefs.setStringList('met_pat_68', pattern.map((e) => e.toString()).toList());
+  }
+
   // --- Exercise Preferences ---
   
   String _exKey(String exerciseId, String key) => '${exerciseId}_$key';

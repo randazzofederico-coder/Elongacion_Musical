@@ -8,6 +8,7 @@ import 'package:elongacion_musical/models/track_model.dart';
 import 'package:elongacion_musical/services/mixer_stream_source.dart';
 import 'package:elongacion_musical/services/settings_service.dart';
 import 'package:elongacion_musical/utils/wav_parser.dart';
+import 'dart:math';
 
 
 class AudioManager {
@@ -68,6 +69,10 @@ class AudioManager {
   final _durationController = StreamController<Duration?>.broadcast();
   Stream<Duration?> get durationStream => _durationController.stream;
   
+  // Custom Player State Stream (to replace just_audio player state for play/pause sync)
+  final _playerStateController = StreamController<PlayerState>.broadcast();
+  Stream<PlayerState> get playerStateStream => _playerStateController.stream;
+  
   Stream<Duration> get bufferedPositionStream => _player.bufferedPositionStream; // Meaningless now?
   
   // Return cached duration or source duration
@@ -81,6 +86,14 @@ class AudioManager {
   // -- Master --
   double _masterVolume = 1.0;
   double get masterVolume => _masterVolume;
+
+  // -- Metronome --
+  double _metronomeVol34 = 0.0;
+  double _metronomeVol68 = 0.0;
+  int? _currentBpm;
+
+  double get metronomeVol34 => _metronomeVol34;
+  double get metronomeVol68 => _metronomeVol68;
 
   // -- Solo --
   // (Handling moved entirely to Tracks, backend manages `anySolo`)
@@ -196,6 +209,15 @@ class AudioManager {
          latencyHint: latency, 
       );
       
+      // Init Metronome Sounds (0: High, 1: Low, 2: Mid)
+      _source!.setMetronomeSound(0, _generateClickSound(1000.0));
+      _source!.setMetronomeSound(1, _generateClickSound(600.0));
+      _source!.setMetronomeSound(2, _generateClickSound(800.0));
+      _source!.setMetronomeVolume(_metronomeVol34, _metronomeVol68);
+      if (_currentBpm != null) {
+          _source!.setMetronomeConfig(_currentBpm!);
+      }
+      
       // DISCONNECT JUST_AUDIO FROM MIXER
       // await _player.setAudioSource(_source!); 
       // Instead, we just use the source directly.
@@ -209,24 +231,23 @@ class AudioManager {
   Future<void> play() async {
     _source?.playNative();
     _startPositionTimer();
-    // _player.play(); // Disabled custom player
+    _playerStateController.add(PlayerState(true, ProcessingState.ready));
   }
   
   Future<void> pause() async {
     _source?.stopNative();
     _stopPositionTimer();
-    // _player.pause();
+    _playerStateController.add(PlayerState(false, ProcessingState.ready));
   }
   
   Future<void> stop() async {
     _source?.stopNative();
     _stopPositionTimer();
-    // _player.stop();
-    // _player.seek(Duration.zero); 
     
     // We need to implement native seek to zero if we want reset
     _source?.seek(Duration.zero); 
     _positionController.add(Duration.zero); 
+    _playerStateController.add(PlayerState(false, ProcessingState.completed));
   }
   
   // Internal Timer for Polling Native Position
@@ -239,7 +260,15 @@ class AudioManager {
           final sr = _source!.sampleRate;
           if (sr > 0) {
              final micros = (frames * 1000000 / sr).round();
-             _positionController.add(Duration(microseconds: micros));
+             final pos = Duration(microseconds: micros);
+             _positionController.add(pos);
+
+             // Auto-stop at end of file, unless in preview mode or looping
+             if (!_isLooping && !_metronomePreviewMode) {
+                 if (pos >= _source!.sourceDuration && pos > Duration.zero) {
+                     stop();
+                 }
+             }
           }
        }
     });
@@ -272,7 +301,60 @@ class AudioManager {
   
   void setMasterVolume(double vol) {
     _masterVolume = vol;
-    _player.setVolume(vol); // Just_audio handling master volume
+    _source?.setMasterVolume(vol);
+  }
+  
+  void setMasterMute(bool muted) {
+    _source?.setMasterMute(muted);
+  }
+
+  void setMasterSolo(bool solo) {
+    _source?.setMasterSolo(solo);
+  }
+  
+  void setMetronomeVolume(double vol34, double vol68) {
+      _metronomeVol34 = vol34;
+      _metronomeVol68 = vol68;
+      _source?.setMetronomeVolume(vol34, vol68);
+  }
+
+  void setMetronomeMute(bool mute34, bool mute68) {
+      _source?.setMetronomeMute(mute34, mute68);
+  }
+
+  void setMetronomeSolo(bool solo34, bool solo68) {
+      _source?.setMetronomeSolo(solo34, solo68);
+  }
+
+  void setMetronomeConfig(int bpm) {
+      _currentBpm = bpm;
+      _source?.setMetronomeConfig(bpm);
+  }
+
+  void setMetronomePattern(List<int> pattern34, List<int> pattern68) {
+      _source?.setMetronomePattern(pattern34, pattern68);
+  }
+
+  bool _metronomePreviewMode = false;
+  
+  void setMetronomePreviewMode(bool enabled) {
+      _metronomePreviewMode = enabled;
+      _source?.setMetronomePreviewMode(enabled);
+  }
+
+  Float32List _generateClickSound(double freq) {
+      final int sampleRate = 44100;
+      final double durationFreq = 0.05; // 50ms click
+      final int samples = (sampleRate * durationFreq).toInt();
+      final Float32List buffer = Float32List(samples);
+      
+      for (int i = 0; i < samples; i++) {
+          final double t = i / sampleRate;
+          // Exponential decay
+          final double envelope = exp(-i / (samples * 0.2)); 
+          buffer[i] = (sin(2 * pi * freq * t) * envelope * 0.5); 
+      }
+      return buffer;
   }
   
   void setTrackVolume(String id, double vol) {

@@ -46,6 +46,21 @@ class LiveMixer {
     _bindings.setVolume(_handle, id, volume);
   }
 
+  void setMasterVolume(double volume) {
+    if (_isDisposed) return;
+    _bindings.setMasterVolume(_handle, volume);
+  }
+
+  void setMasterMute(bool muted) {
+    if (_isDisposed) return;
+    _bindings.setMasterMute(_handle, muted);
+  }
+
+  void setMasterSolo(bool solo) {
+    if (_isDisposed) return;
+    _bindings.setMasterSolo(_handle, solo);
+  }
+
   void setPan(String id, double pan) {
     if (_isDisposed) return;
     _bindings.setPan(_handle, id, pan);
@@ -122,5 +137,41 @@ class LiveMixer {
   void setSoundTouchSetting(int settingId, int value) {
      if (_isDisposed) return;
      _bindings.setSoundTouchSetting(_handle, settingId, value);
+  }
+
+  // --- METRONOME ---
+  void setMetronomeConfig(int bpm) {
+     if (_isDisposed) return;
+     _bindings.setMetronomeConfig(_handle, bpm);
+  }
+
+  void setMetronomeSound(int type, Float32List data) {
+     if (_isDisposed) return;
+     _bindings.setMetronomeSound(_handle, type, data);
+  }
+
+  void setMetronomeVolume(double vol34, double vol68) {
+     if (_isDisposed) return;
+     _bindings.setMetronomeVolume(_handle, vol34, vol68);
+  }
+
+  void setMetronomeMute(bool mute34, bool mute68) {
+     if (_isDisposed) return;
+     _bindings.setMetronomeMute(_handle, mute34, mute68);
+  }
+
+  void setMetronomeSolo(bool solo34, bool solo68) {
+     if (_isDisposed) return;
+     _bindings.setMetronomeSolo(_handle, solo34, solo68);
+  }
+
+  void setMetronomePattern(List<int>? pattern34, List<int>? pattern68) {
+      if (_isDisposed) return;
+      _bindings.setMetronomePattern(_handle, pattern34, pattern68);
+  }
+
+  void setMetronomePreviewMode(bool enabled) {
+      if (_isDisposed) return;
+      _bindings.setMetronomePreviewMode(_handle, enabled);
   }
 }
