@@ -67,6 +67,7 @@ private:
        float pan = 0.0f;
        bool muted = false;
        bool solo = false;
+       float envelope = 1.0f;
    };
 
    std::map<std::string, Track*> _tracks;
@@ -83,6 +84,7 @@ private:
    // Envelopes for click-prevention
    float _masterEnvelope = 1.0f;
    float _targetEnvelope = 1.0f;
+   float _masterStemEnv = 1.0f;
    
    // Master Volume
    float _masterVolume = 1.0f;
@@ -111,14 +113,17 @@ private:
    MetronomeVoice _clickNoise;// type 2
 
    // Solo logic helper
-   bool _anySolo = false;
+   bool _anyTrackSolo = false; // Renamed from _anySolo
    bool _masterMuted = false;
    bool _masterSolo = false;
+   
+   // STEM Solo tracking
+   bool _anyStemSolo = false; // Added
    bool _metronome34Muted = false;
    bool _metronome34Solo = false;
    bool _metronome68Muted = false;
    bool _metronome68Solo = false;
-   bool _globalAnySolo = false;
+   // _globalAnySolo removed
 
    void _updateAnySolo();
    void _updateGlobalSolo();

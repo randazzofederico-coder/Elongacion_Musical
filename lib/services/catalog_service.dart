@@ -3,11 +3,10 @@ import 'package:flutter/foundation.dart';
 
 class CatalogService {
   static const List<TrackData> _defaultTracks = [
-    TrackData(id: '1', name: 'Ample Bass', assetPath: 'assets/audio/Duo 1/ample_bass.wav'),
-    TrackData(id: '2', name: 'Bombo Out', assetPath: 'assets/audio/Duo 1/bombo.wav'),
-    TrackData(id: '3', name: 'Fl 1', assetPath: 'assets/audio/Duo 1/fl1.wav'),
-    TrackData(id: '4', name: 'Fl 2', assetPath: 'assets/audio/Duo 1/fl2.wav'),
-    TrackData(id: '5', name: 'Piano', assetPath: 'assets/audio/Duo 1/piano.wav'),
+    TrackData(id: '1', name: 'Flauta', assetPath: ''),
+    TrackData(id: '2', name: 'Piano', assetPath: ''),
+    TrackData(id: '3', name: 'Contrabajo', assetPath: ''),
+    TrackData(id: '4', name: 'Bombo', assetPath: ''),
   ];
   
   // Section 1: RITMO (5 Chapters)
@@ -35,13 +34,16 @@ class CatalogService {
      return List.generate(10, (index) {
        final num = index + 1;
        
-       if (num == 1 || num == 2) {
-         // --- REAL DATA FOR CHAPTERS 1 AND 2 ---
-         int numExercises = num == 1 ? 7 : 6;
+       if (num >= 1 && num <= 3) {
+         // --- REAL DATA FOR CHAPTERS 1, 2 AND 3 ---
+         int numExercises = 3; // default fallback
+         if (num == 1) numExercises = 7;
+         if (num == 2) numExercises = 6;
+         if (num == 3) numExercises = 3;
          return _buildInstrumentChapter(num, numExercises);
        }
 
-       // --- PLACEHOLDER FOR CHAPTERS 3-10 ---
+       // --- PLACEHOLDER FOR CHAPTERS 4-10 ---
        // Some exercises
        final List<Exercise> exercises = List.generate(3, (exIndex) => Exercise(
             id: 'i_c${num}_e$exIndex',
@@ -68,54 +70,79 @@ class CatalogService {
   }
 
   static Chapter _buildInstrumentChapter(int chapterNum, int numExercises) {
-    // Standard Exercises (Quartet)
+    // Helper formats:
+    // Duo: assets/audio/Con instrumento/Capitulo X/Capitulo X-Duo-Inst.wav
+    // Ej: assets/audio/Con instrumento/Capitulo X/Capitulo X-Ej Y-Inst.wav
+    String getDuoPath(String instrument) {
+      return 'assets/audio/Con instrumento/Capitulo $chapterNum/Capitulo $chapterNum-Duo-$instrument.wav';
+    }
+
+    String getPath(int exNum, String instrument) {
+      String exPrefix = 'Ej';
+      if (chapterNum == 2 && exNum == 1) exPrefix = 'EJ'; // Based on file list 'Capitulo 2-EJ 1-...'
+      return 'assets/audio/Con instrumento/Capitulo $chapterNum/Capitulo $chapterNum-$exPrefix $exNum-$instrument.wav';
+    }
+
+    // Standard Exercises
     final List<Exercise> exercises = List.generate(numExercises, (index) {
       final exNum = index + 1;
       
-      String getPath(String instrument) {
-        String exPrefix = 'Ej';
-        if (chapterNum == 1 && exNum == 4) exPrefix = 'Eg';
-        if (chapterNum == 2 && exNum == 1) exPrefix = 'EJ';
-        return 'assets/audio/capitulo $chapterNum/Capitulo $chapterNum-$exPrefix $exNum-$instrument.wav';
+      List<TrackData> tracks = [];
+      
+      // Capitulo 3, Ejercicio 1 has Fl1 & Fl2 instead of Fl Solista
+      if (chapterNum == 3 && exNum == 1) {
+        tracks = [
+          TrackData(id: 'fl1', name: 'Flauta 1', assetPath: getPath(exNum, 'Fl1')),
+          TrackData(id: 'fl2', name: 'Flauta 2', assetPath: getPath(exNum, 'Fl2')),
+          TrackData(id: 'pn', name: 'Piano', assetPath: getPath(exNum, 'Piano')),
+          TrackData(id: 'cb', name: 'Contrabajo', assetPath: getPath(exNum, 'Contrabajo')),
+          TrackData(id: 'bb', name: 'Bombo', assetPath: getPath(exNum, 'Bombo')),
+        ];
+      } else {
+        tracks = [
+          TrackData(id: 'fl', name: 'Flauta', assetPath: getPath(exNum, 'Fl Solista')),
+          TrackData(id: 'pn', name: 'Piano', assetPath: getPath(exNum, 'Piano')),
+          TrackData(id: 'cb', name: 'Contrabajo', assetPath: getPath(exNum, 'Contrabajo')),
+          TrackData(id: 'bb', name: 'Bombo', assetPath: getPath(exNum, 'Bombo')),
+        ];
       }
 
       return Exercise(
         id: 'i_c${chapterNum}_e$index', 
         title: 'Ejercicio $exNum', 
         type: ExerciseType.instrument, 
-        bpm: 140,
+        bpm: chapterNum == 3 ? 170 : 140,
         timeSignatureNumerator: 3,
         timeSignatureDenominator: 4,
         preWaitMeasures: 1,
         countInMeasures: 2,
-        tracks: [
-          TrackData(id: 'fl', name: 'Flauta', assetPath: getPath('Fl Solista')),
-          TrackData(id: 'pn', name: 'Piano', assetPath: getPath('Piano')),
-          TrackData(id: 'cb', name: 'Contrabajo', assetPath: getPath('Contrabajo')),
-          TrackData(id: 'bb', name: 'Bombo', assetPath: getPath('Bombo')),
-        ]
+        tracks: tracks,
       );
     });
 
-    // 1 Duo (Quintet with 2 Flutes)
-    String getDuoPath(String instrument) => 'assets/audio/capitulo $chapterNum/Capitulo $chapterNum-Duo-$instrument.wav';
+    // 1 Duo per Chapter
+    List<TrackData> duoTracks = [
+      TrackData(id: 'fl1', name: 'Flauta 1', assetPath: getDuoPath('Fl1')),
+      TrackData(id: 'fl2', name: 'Flauta 2', assetPath: getDuoPath('Fl2')),
+      TrackData(id: 'cb', name: 'Contrabajo', assetPath: getDuoPath('Contrabajo')),
+      TrackData(id: 'bb', name: 'Bombo', assetPath: getDuoPath('Bombo')),
+    ];
+    
+    // Capitulo 1 Duo does NOT have a Piano track in the assets!
+    if (chapterNum != 1) {
+      duoTracks.insert(2, TrackData(id: 'pn', name: 'Piano', assetPath: getDuoPath('Piano')));
+    }
 
     exercises.add(Exercise(
       id: 'i_c${chapterNum}_duo',
       title: 'Dúo',
       type: ExerciseType.instrument,
-      bpm: 140,
+      bpm: chapterNum == 3 ? 170 : 140,
       timeSignatureNumerator: 3,
       timeSignatureDenominator: 4,
       preWaitMeasures: 1,
       countInMeasures: 2,
-      tracks: [
-        TrackData(id: 'fl1', name: 'Flauta 1', assetPath: getDuoPath('Fl1')),
-        TrackData(id: 'fl2', name: 'Flauta 2', assetPath: getDuoPath('Fl2')),
-        TrackData(id: 'pn', name: 'Piano', assetPath: getDuoPath('Piano')),
-        TrackData(id: 'cb', name: 'Contrabajo', assetPath: getDuoPath('Contrabajo')),
-        TrackData(id: 'bb', name: 'Bombo', assetPath: getDuoPath('Bombo')),
-      ]
+      tracks: duoTracks,
     ));
 
     return Chapter(

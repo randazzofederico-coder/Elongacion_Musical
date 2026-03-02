@@ -52,12 +52,10 @@
 ## 2. ESTRUCTURA DE CARPETAS
 ### Assets de Audio (Data Catalog)
 Estructura jerárquica para cargar dinámicamente los audios reales.
-- **Nuevos Capítulos (Ej. Capítulo 1 y 2):**
-  - Ubicación: `assets/audio/capitulo N/`
-  - Archivos Ejercicios: Formato `Capitulo N-Ej M-Instrumento.wav` (Instrumentos: `Fl Solista`, `Piano`, `Contrabajo`, `Bombo`).
-  - Archivos Dúos: Formato `Capitulo N-Duo-Instrumento.wav` (Instrumentos: `Fl1`, `Fl2`, `Piano`, `Contrabajo`, `Bombo`).
-- **Capítulos Legacy (Placeholder):**
-  - Ubicación: `assets/audio/Instrumento/capitulo_N/ejercicio_M/` (Para futuras migraciones).
+- **Audios Oficiales (Nuevos Capítulos 1, 2 y 3):**
+  - Ubicación: `assets/audio/Con instrumento/Capitulo N/`
+  - Archivos Ejercicios: Formato `Capitulo N-Ej M-Instrumento.wav` (Instrumentos: `Fl Solista`, `Piano`, `Contrabajo`, `Bombo`). (Capítulo 3 a veces usa `Fl1` y `Fl2` en lugar de `Fl Solista`).
+  - Archivos Dúos: Formato `Capitulo N-Duo-Instrumento.wav` (Instrumentos: `Fl1`, `Fl2`, `Piano` (solo caps 2 y 3), `Contrabajo`, `Bombo`).
 
 **Convención para Canales:**
 - `Piano`: **STEREO** (Mantener espacialidad para la mezcla final).
@@ -116,8 +114,12 @@ lib/
 - **Playback Strategy:** `MixerStreamSource` delegates control to `LiveMixer`.
   - **Status:** **ACTIVE**. Mixing, Time-Stretching, and Timing are handled exclusively by C++.
   - **Data Path:** `Float32` optimized. WAV -> Memory -> FFI -> C++ `LiveMixer`.
-  - **Mixer Pipeline:** `Tracks` -> `Routing (Solo-in-Place & Global Solo)` -> `Summing` -> `Vocoder (Time Stretch)` -> `Miniaudio Output`.
-  - **Routing Logic:** Implements professional "Solo-in-Place". Supports multiple concurrent Solos across Musical Tracks and Metrónomos. If any track or metrónomo has Solo active (`Global Solo`), the engine natively overrides all Mute states and only mixes the soloed elements. Master Solo and Mute natively apply to the whole Track bus. This guarantees that UI "Mute" interactions do not destructively alter the users' perfectly tuned fader volumes.
+  - **Mixer Pipeline:** `Tracks` -> `Master Fader (Layer 1)` -> `Stem Routing (Layer 2)` -> `Vocoder (Time Stretch)` -> `Miniaudio Output`.
+  - **Routing Logic (Layered Stems):** Implements specialized "Stem Solo" architecture. 
+    - **Layer 1 (Track Bus):** Instrument tracks internally Solo-in-Place against other instruments.
+    - **Layer 2 (Stems):** The Master Bus, Metronome 3/4, and Metronome 6/8 exist as independent Stems. Soloing a Metronome mutes the Master Bus, and soloing the Master Bus mutes the Metronomes.
+    - **Click Prevention:** All dynamic volume changes (Mute/Solo/Play/Pause/Seek) utilize a 20ms fade envelope to prevent zero-crossing "chasquidos" (audio pops).
+    - This guarantees that UI "Mute" interactions do not destructively alter the users' perfectly tuned fader volumes.
 - **Timing & Synchronization (The "Atomic Clock"):**
   - **Source of Truth:** An atomic frame counter in the C++ audio callback.
   - **UI Sync:** Dart polls this atomic counter at 60fps via `Ticker` in `WaveformSeekBar`.
@@ -230,9 +232,9 @@ lib/
 - **Specific Audio Glitch (00:08 - 00:10):** [RESOLVED]
   - **Solution:** The artificial "Smart Pacing" logic (`Future.delayed`) was fighting `just_audio`'s internal buffer logic. Removing the pacing and letting the player pull data naturally eliminated the glitch.
 - **Audio Glitch on Pause/Seek:** [RESOLVED]
-  - **Issue:** Audio continued to play or restarted abruptly when pausing, stopping, or seeking.
-  - **Cause:** Miniaudio hardware buffer retained processed frames after device stop, and SoundTouch retained temporal data across seeks.
-  - **Mitigation:** Implemented an internal `_isPlaying` flag in `LiveMixer.cpp` to output explicit silence when paused. Added a 20ms quick fade-in envelope (`_masterEnvelope`) to both `startPlayback()` and `seek()` to eliminate zero-crossing pops and mask any buffer residues. `_mixBuffer` is also explicitly cleared on seek.
+  - **Issue:** Audio continued to play or restarted abruptly when pausing, stopping, or seeking. Mute and Solo toggles caused "chasquidos" (hardware pops).
+  - **Cause:** Miniaudio hardware buffer retained processed frames after device stop, and SoundTouch retained temporal data across seeks. Instant volume changes caused wave-phase discontinuity clipping.
+  - **Mitigation:** Implemented an internal `_isPlaying` flag in `LiveMixer.cpp` to output explicit silence when paused. Added a 20ms smooth fade envelope (`_masterEnvelope`, `_masterStemEnv`, `track->envelope`) to Play/Pause, Seek, Mutes, and Solos to eliminate all zero-crossing pops. `_mixBuffer` is also explicitly cleared on seek.
 - **Play Head Synchronization:** [RESOLVED]
   - **Issue:** The visual cursor skipped, lagged, or drifted when seeking or pausing.
   - **Cause:** `MixerStreamSource` was buffering asynchronously. When paused, the stream stopped updating natively but the UI relied on stale `just_audio` events.

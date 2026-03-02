@@ -163,18 +163,17 @@ void LiveMixer::setMasterVolume(float volume) {
 }
 
 void LiveMixer::_updateAnySolo() {
-    _anySolo = false;
+    _anyTrackSolo = false;
     for (auto const& [key, track] : _tracks) {
         if (track->solo) {
-            _anySolo = true;
+            _anyTrackSolo = true;
             break;
         }
     }
-    _updateGlobalSolo();
 }
 
 void LiveMixer::_updateGlobalSolo() {
-    _globalAnySolo = _anySolo || _masterSolo || _metronome34Solo || _metronome68Solo;
+    _anyStemSolo = _masterSolo || _metronome34Solo || _metronome68Solo;
 }
 
 void LiveMixer::_updateMaxTrackSamples() {
@@ -330,63 +329,68 @@ void LiveMixer::_mixInternal(float* outputBuffer, int numFrames) {
         
         if (_metronomePreviewMode) {
             playTracks = false;
-        } else {
-            // Master Mute / Solo logic applied to ALL tracks bus
-            if (_globalAnySolo) {
-                if (!_masterSolo && !_anySolo) playTracks = false; 
-            } else {
-                if (_masterMuted) playTracks = false;
-            }
         }
+        float envelopeStep = 1.0f / (44100.0f * 0.02f); // 20ms fade
         
+        // 1. MIX TRACK BUS
         if (playTracks) {
             // Iterate tracks
             for (auto const& [key, track] : _tracks) {
-             // Solo-in-place logic: 
-             // If ANY track or metronome is soloed globally, ONLY soloed ones play
-             // But if Master is soloed, ALL unmuted tracks play because Master represents the whole bus.
-             if (_globalAnySolo) {
-                 if (!track->solo && !_masterSolo) continue; 
-             } else {
-                 if (track->muted) continue;
-             }
-             
-             int64_t framesAvailable = static_cast<int64_t>(track->data.size()) / track->channels;
-             
-             if (_currentPosition < 0) _currentPosition = 0;
+                 // Solo-in-place logic FOR TRACKS ONLY:
+                 bool playThisTrack = true;
+                 if (_anyTrackSolo) {
+                     if (!track->solo) playThisTrack = false; 
+                 } else {
+                     if (track->muted) playThisTrack = false;
+                 }
+                 
+                 float targetTrackEnv = playThisTrack ? 1.0f : 0.0f;
+                 if (track->envelope < targetTrackEnv) {
+                     track->envelope += envelopeStep;
+                     if (track->envelope > targetTrackEnv) track->envelope = targetTrackEnv;
+                 } else if (track->envelope > targetTrackEnv) {
+                     track->envelope -= envelopeStep;
+                     if (track->envelope < targetTrackEnv) track->envelope = targetTrackEnv;
+                 }
 
-             if (_currentPosition < framesAvailable) {
-                 float lVal = 0.0f;
-                 float rVal = 0.0f;
+                 if (track->envelope <= 0.0001f) continue;
                  
-                 size_t sampleIdx = static_cast<size_t>(_currentPosition * track->channels);
+                 int64_t framesAvailable = static_cast<int64_t>(track->data.size()) / track->channels;
                  
-                 if (sampleIdx < track->data.size() && (sampleIdx + track->channels) <= track->data.size()) {
-                     if (track->channels == 1) {
-                         lVal = track->data[sampleIdx];
-                         rVal = lVal;
-                     } else {
-                         lVal = track->data[sampleIdx];
-                         rVal = track->data[sampleIdx + 1];
-                     }
-                  }
-                 
-                 float lGain = 1.0f;
-                 float rGain = 1.0f;
-                 if (track->pan > 0) lGain = 1.0f - track->pan;
-                 else if (track->pan < 0) rGain = 1.0f + track->pan;
-                 
-                 lVal *= track->volume * lGain;
-                 rVal *= track->volume * rGain;
-                 
-                 leftSum += lVal;
-                 rightSum += rVal;
+                 if (_currentPosition < 0) _currentPosition = 0;
+
+                 if (_currentPosition < framesAvailable) {
+                     float lVal = 0.0f;
+                     float rVal = 0.0f;
+                     
+                     size_t sampleIdx = static_cast<size_t>(_currentPosition * track->channels);
+                     
+                     if (sampleIdx < track->data.size() && (sampleIdx + track->channels) <= track->data.size()) {
+                         if (track->channels == 1) {
+                             lVal = track->data[sampleIdx];
+                             rVal = lVal;
+                         } else {
+                             lVal = track->data[sampleIdx];
+                             rVal = track->data[sampleIdx + 1];
+                         }
+                      }
+                     
+                     float lGain = 1.0f;
+                     float rGain = 1.0f;
+                     if (track->pan > 0) lGain = 1.0f - track->pan;
+                     else if (track->pan < 0) rGain = 1.0f + track->pan;
+                     
+                     // Apply track volume, pan, and mute/solo envelope
+                     lVal *= track->volume * lGain * track->envelope;
+                     rVal *= track->volume * rGain * track->envelope;
+                     
+                     leftSum += lVal;
+                     rightSum += rVal;
+                 }
              }
-         }
-        } // close if (!_metronomePreviewMode)
+        } // close if playTracks
         
         // --- APPLY MASTER ENVELOPE AND VOLUME TO TRACKS ---
-        float envelopeStep = 1.0f / (44100.0f * 0.02f); 
         if (_masterEnvelope < _targetEnvelope) {
             _masterEnvelope += envelopeStep;
             if (_masterEnvelope > _targetEnvelope) _masterEnvelope = _targetEnvelope;
@@ -397,6 +401,26 @@ void LiveMixer::_mixInternal(float* outputBuffer, int numFrames) {
         
         leftSum *= _masterEnvelope * _masterVolume;
         rightSum *= _masterEnvelope * _masterVolume;
+        
+        // HANDLE STEM SOLO/MUTE
+        bool playMaster = true;
+        if (_anyStemSolo) {
+            playMaster = _masterSolo;
+        } else {
+            playMaster = !_masterMuted;
+        }
+        
+        float targetMasterStem = playMaster ? 1.0f : 0.0f;
+        if (_masterStemEnv < targetMasterStem) {
+            _masterStemEnv += envelopeStep;
+            if (_masterStemEnv > targetMasterStem) _masterStemEnv = targetMasterStem;
+        } else if (_masterStemEnv > targetMasterStem) {
+            _masterStemEnv -= envelopeStep;
+            if (_masterStemEnv < targetMasterStem) _masterStemEnv = targetMasterStem;
+        }
+        
+        leftSum *= _masterStemEnv;
+        rightSum *= _masterStemEnv;
         
         // Handle Metronome Trigger
         if (_bpm > 0 && (_vol34 > 0.0f || _vol68 > 0.0f)) {
@@ -421,8 +445,11 @@ void LiveMixer::_mixInternal(float* outputBuffer, int numFrames) {
                 
                 // 3/4 Metronome Logic
                 bool play34 = true;
-                if (_globalAnySolo && !_metronome34Solo) play34 = false;
-                if (!_globalAnySolo && _metronome34Muted) play34 = false;
+                if (_anyStemSolo) {
+                    play34 = _metronome34Solo;
+                } else {
+                    play34 = !_metronome34Muted;
+                }
                 
                 if (play34 && _vol34 > 0.0f && type34 > 0) {
                     if (type34 == 1) volHigh = std::max(volHigh, _vol34);
@@ -432,8 +459,11 @@ void LiveMixer::_mixInternal(float* outputBuffer, int numFrames) {
                 
                 // 6/8 Metronome Logic
                 bool play68 = true;
-                if (_globalAnySolo && !_metronome68Solo) play68 = false;
-                if (!_globalAnySolo && _metronome68Muted) play68 = false;
+                if (_anyStemSolo) {
+                    play68 = _metronome68Solo;
+                } else {
+                    play68 = !_metronome68Muted;
+                }
                 
                 if (play68 && _vol68 > 0.0f && type68 > 0) {
                     if (type68 == 1) volHigh = std::max(volHigh, _vol68);
