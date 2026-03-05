@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:elongacion_musical/constants/app_colors.dart';
 
 class WaveformPainter extends CustomPainter {
   final List<List<double>>? waveformData;
@@ -6,6 +7,7 @@ class WaveformPainter extends CustomPainter {
   final Duration duration;
   final Color color;
   final Color backgroundColor;
+  final Color playheadColor;
   final double strokeWidth;
   final double gain;
   
@@ -23,6 +25,7 @@ class WaveformPainter extends CustomPainter {
     required this.position,
     required this.duration,
     required this.color,
+    required this.playheadColor,
     this.backgroundColor = Colors.black26,
     this.strokeWidth = 1.0,
     this.gain = 1.0,
@@ -58,12 +61,12 @@ class WaveformPainter extends CustomPainter {
            final double drawStartX = startX.clamp(0.0, w);
            final double drawEndX = endX.clamp(0.0, w);
            if (drawEndX > drawStartX) {
-              final loopPaint = Paint()..color = Colors.white.withValues(alpha: 0.1);
+              final loopPaint = Paint()..color = color.withOpacity(0.2);
               canvas.drawRect(Rect.fromLTRB(drawStartX, 0, drawEndX, h), loopPaint);
            }
            
            // Draw markers only if visible
-           final markerPaint = Paint()..color = Colors.amber..strokeWidth = 1;
+           final markerPaint = Paint()..color = color..strokeWidth = 1;
            if (startX >= 0 && startX <= w) {
                canvas.drawLine(Offset(startX, 0), Offset(startX, h), markerPaint);
                final handlePath = Path();
@@ -71,7 +74,7 @@ class WaveformPainter extends CustomPainter {
                handlePath.lineTo(startX + 6, 0);
                handlePath.lineTo(startX, 6);
                handlePath.close();
-               canvas.drawPath(handlePath, Paint()..color = Colors.amber);
+               canvas.drawPath(handlePath, Paint()..color = color);
            }
            if (endX >= 0 && endX <= w) {
                canvas.drawLine(Offset(endX, 0), Offset(endX, h), markerPaint);
@@ -80,7 +83,7 @@ class WaveformPainter extends CustomPainter {
                handlePathEnd.lineTo(endX - 6, h);
                handlePathEnd.lineTo(endX, h - 6);
                handlePathEnd.close();
-               canvas.drawPath(handlePathEnd, Paint()..color = Colors.amber);
+               canvas.drawPath(handlePathEnd, Paint()..color = color);
            }
        }
     }
@@ -107,7 +110,7 @@ class WaveformPainter extends CustomPainter {
       final double absoluteX = (position.inMilliseconds / duration.inMilliseconds) * virtualWidth;
       final double x = absoluteX - scrollOffset;
       if (x >= 0 && x <= w) {
-          final headPaint = Paint()..color = Colors.white..strokeWidth = 2; // Thicker playhead
+          final headPaint = Paint()..color = playheadColor..strokeWidth = 2; // Thicker playhead
           canvas.drawLine(Offset(x, 0), Offset(x, h), headPaint);
       }
     }

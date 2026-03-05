@@ -39,8 +39,10 @@ dependencies:
   provider: ^6.1.5
   native_audio_engine:
     path: ./packages/native_audio_engine
+  ffmpeg_kit_flutter_new_audio: ^2.0.0
   just_audio_windows: ^0.2.2
   shared_preferences: ^2.5.4
+  path_provider: ^2.1.5
 
 
 dev_dependencies:
@@ -68,8 +70,11 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/audio/Con instrumento/Capitulo 1/
+    - assets/audio/Con instrumento/Capitulo 1 M4A/
     - assets/audio/Con instrumento/Capitulo 2/
+    - assets/audio/Con instrumento/Capitulo 2 M4A/
     - assets/audio/Con instrumento/Capitulo 3/
+    - assets/audio/Con instrumento/Capitulo 3 M4A/
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

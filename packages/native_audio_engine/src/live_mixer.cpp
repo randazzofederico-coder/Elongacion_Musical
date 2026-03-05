@@ -88,23 +88,106 @@ int64_t LiveMixer::getAtomicPosition() {
     return _atomicFramesWritten.load(std::memory_order_acquire);
 }
 
-void LiveMixer::addTrack(const char* id, const float* data, int numSamples, int channels) {
-    if (!id || !data || numSamples <= 0) return;
-
-    std::lock_guard<std::mutex> lock(_mutex);
-    
-    // Check if exists
-    if (_tracks.find(id) != _tracks.end()) {
-        delete _tracks[id];
-        _tracks.erase(id);
+LiveMixer::WaveformData* LiveMixer::addTrack(const char* id, const char* filePath) {
+    if (!id || !filePath) {
+        LiveMixer::WaveformData* err = new LiveMixer::WaveformData{nullptr, 0, 0, 0, 0, -1};
+        return err;
     }
-    
-    Track* track = new Track();
-    track->channels = channels;
-    track->data.assign(data, data + numSamples);
-    
-    _tracks[id] = track;
-    _updateMaxTrackSamples();
+
+    ma_decoder decoder;
+    ma_decoder_config config = ma_decoder_config_init_default();
+    config.format = ma_format_f32; 
+
+    ma_result initResult = ma_decoder_init_file(filePath, &config, &decoder);
+    if (initResult != MA_SUCCESS) {
+        LiveMixer::WaveformData* err = new LiveMixer::WaveformData{nullptr, 0, 0, 0, 0, (int)initResult};
+        return err;
+    }
+
+    ma_uint64 totalFrames = 0;
+    ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames);
+
+    int channels = decoder.outputChannels;
+    int sampleRate = decoder.outputSampleRate;
+
+    std::vector<float> pcmData;
+
+    if (totalFrames > 0) {
+        pcmData.resize(totalFrames * channels);
+        ma_uint64 framesRead = 0;
+        ma_decoder_read_pcm_frames(&decoder, pcmData.data(), totalFrames, &framesRead);
+        totalFrames = framesRead;
+        pcmData.resize(totalFrames * channels);
+    } else {
+        float chunk[4096];
+        ma_uint64 framesRead = 0;
+        while (true) {
+            ma_result res = ma_decoder_read_pcm_frames(&decoder, chunk, 4096 / channels, &framesRead);
+            if (framesRead == 0) break;
+            pcmData.insert(pcmData.end(), chunk, chunk + (framesRead * channels));
+            if (res != MA_SUCCESS) break;
+        }
+        totalFrames = pcmData.size() / channels;
+    }
+
+    ma_decoder_uninit(&decoder);
+
+    if (totalFrames == 0) {
+        LiveMixer::WaveformData* err = new LiveMixer::WaveformData{nullptr, 0, 0, 0, 0, -2};
+        return err;
+    }
+
+    // Compute Waveform Peaks
+    double durationInSeconds = (double)totalFrames / sampleRate;
+    int targetPoints = (int)(durationInSeconds * 150.0);
+    if (targetPoints < 2000) targetPoints = 2000;
+    if (targetPoints > 100000) targetPoints = 100000;
+
+    int step = std::ceil((double)totalFrames / targetPoints);
+    if (step < 1) step = 1;
+
+    int actualPoints = (totalFrames + step - 1) / step;
+    float* peaks = (float*)malloc(actualPoints * channels * sizeof(float));
+
+    for (int c = 0; c < channels; ++c) {
+        float* channelPeaks = peaks + (c * actualPoints);
+        for (int p = 0; p < actualPoints; ++p) {
+            uint64_t startFrame = p * step;
+            uint64_t endFrame = startFrame + step;
+            if (endFrame > totalFrames) endFrame = totalFrames;
+
+            float maxVal = 0.0f;
+            for (uint64_t f = startFrame; f < endFrame; ++f) {
+                float val = std::abs(pcmData[f * channels + c]);
+                if (val > maxVal) maxVal = val;
+            }
+            channelPeaks[p] = maxVal;
+        }
+    }
+
+    // Assign to track holding the lock
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (_tracks.find(id) != _tracks.end()) {
+            delete _tracks[id];
+            _tracks.erase(id);
+        }
+        Track* track = new Track();
+        track->channels = channels;
+        track->data = std::move(pcmData); // Zero-copy move!
+        _tracks[id] = track;
+        _updateMaxTrackSamples();
+    } // release lock
+
+    LiveMixer::WaveformData* result = new LiveMixer::WaveformData();
+    result->peakData = peaks;
+    result->peakDataLength = actualPoints * channels;
+    result->channels = channels;
+    result->sampleRate = sampleRate;
+    result->totalFrames = totalFrames;
+    result->error = 0;
+
+    return result;
 }
 
 void LiveMixer::removeTrack(const char* id) {
@@ -173,7 +256,13 @@ void LiveMixer::_updateAnySolo() {
 }
 
 void LiveMixer::_updateGlobalSolo() {
-    _anyStemSolo = _masterSolo || _metronome34Solo || _metronome68Solo;
+    _anyStemSolo = _masterSolo;
+    for (const auto& track : _metronomeTracks) {
+        if (track.solo) {
+            _anyStemSolo = true;
+            break;
+        }
+    }
 }
 
 void LiveMixer::_updateMaxTrackSamples() {
@@ -246,8 +335,18 @@ void LiveMixer::setSoundTouchSetting(int settingId, int value) {
 // --- METRONOME ---
 void LiveMixer::setMetronomeConfig(int bpm) {
     std::lock_guard<std::mutex> lock(_mutex);
+    
+    // If we are in isolated mode (Home Screen), seamlessly scale position 
+    // rather than resetting the pattern, so changing BPM doesn't restart the measure!
+    if (_metronomePreviewMode && _bpm > 0) {
+        double ratio = (double)_bpm / (double)bpm;
+        _currentPosition = (int64_t)(_currentPosition * ratio);
+        // Do NOT reset _lastEighth, so the trigger engine seamlessly picks up the new rate
+    } else {
+        _lastEighth = -1; // reset trigger absolute alignment for Exercises
+    }
+    
     _bpm = bpm;
-    _lastEighth = -1; // reset trigger
 }
 
 void LiveMixer::setMetronomeSound(int type, const float* data, int numSamples) {
@@ -262,33 +361,58 @@ void LiveMixer::setMetronomeSound(int type, const float* data, int numSamples) {
     }
 }
 
-void LiveMixer::setMetronomeVolume(float vol34, float vol68) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    _vol34 = vol34;
-    _vol68 = vol68;
+void LiveMixer::_parseFlatPattern(MetronomeTrack& track, const int* flatData, const int* subdivisions, int numPulses) {
+    track.pulses.clear();
+    if (numPulses <= 0 || !flatData || !subdivisions) return;
+    
+    int dataIndex = 0;
+    for (int i = 0; i < numPulses; i++) {
+        MetronomePulse pulse;
+        int m = subdivisions[i];
+        for (int j = 0; j < m; j++) {
+            pulse.subdivisions.push_back(flatData[dataIndex++]);
+        }
+        track.pulses.push_back(pulse);
+    }
 }
 
-void LiveMixer::setMetronomeMute(bool mute34, bool mute68) {
+void LiveMixer::addMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo) {
     std::lock_guard<std::mutex> lock(_mutex);
-    _metronome34Muted = mute34;
-    _metronome68Muted = mute68;
-}
-
-void LiveMixer::setMetronomeSolo(bool solo34, bool solo68) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    _metronome34Solo = solo34;
-    _metronome68Solo = solo68;
+    MetronomeTrack track;
+    track.id = id;
+    track.volume = vol;
+    track.muted = mute;
+    track.solo = solo;
+    _parseFlatPattern(track, flatPatternData, subdivisionsData, numPulses);
+    _metronomeTracks.push_back(track);
     _updateGlobalSolo();
 }
 
-void LiveMixer::setMetronomePattern(const int* pattern34, const int* pattern68) {
+void LiveMixer::updateMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo) {
     std::lock_guard<std::mutex> lock(_mutex);
-    if (pattern34) {
-        for (int i = 0; i < 6; i++) _pattern34[i] = pattern34[i];
+    for (auto& track : _metronomeTracks) {
+        if (track.id == id) {
+            track.volume = vol;
+            track.muted = mute;
+            track.solo = solo;
+            _parseFlatPattern(track, flatPatternData, subdivisionsData, numPulses);
+            break;
+        }
     }
-    if (pattern68) {
-        for (int i = 0; i < 6; i++) _pattern68[i] = pattern68[i];
-    }
+    _updateGlobalSolo();
+}
+
+void LiveMixer::removeMetronomePattern(int id) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _metronomeTracks.erase(std::remove_if(_metronomeTracks.begin(), _metronomeTracks.end(), 
+        [id](const MetronomeTrack& track) { return track.id == id; }), _metronomeTracks.end());
+    _updateGlobalSolo();
+}
+
+void LiveMixer::clearMetronomePatterns() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _metronomeTracks.clear();
+    _updateGlobalSolo();
 }
 
 void LiveMixer::setMetronomePreviewMode(bool enabled) {
@@ -422,67 +546,77 @@ void LiveMixer::_mixInternal(float* outputBuffer, int numFrames) {
         leftSum *= _masterStemEnv;
         rightSum *= _masterStemEnv;
         
-        // Handle Metronome Trigger
-        if (_bpm > 0 && (_vol34 > 0.0f || _vol68 > 0.0f)) {
-            double framesPerEighth = (44100.0 * 60.0) / (_bpm * 2.0);
-            int currentEighth = (int)((double)_currentPosition / framesPerEighth);
+        // Handle Metronome Trigger (Stateless Analytical Polyrhythm Engine)
+        if (_bpm > 0 && !_metronomeTracks.empty()) {
+            double framesPerBeat = (44100.0 * 60.0) / _bpm;
             
-            if (_lastEighth == -1 || currentEighth < _lastEighth) {
-                _lastEighth = currentEighth - 1; 
+            float volHigh = 0.0f;
+            float volLow = 0.0f;
+            float volNoise = 0.0f;
+            
+            double prevBeatFloat = (double)(_currentPosition - 1) / framesPerBeat;
+            double currBeatFloat = (double)_currentPosition / framesPerBeat;
+            
+            for (const auto& track : _metronomeTracks) {
+                if (track.pulses.empty()) continue;
+                
+                bool playTrack = true;
+                if (_anyStemSolo) {
+                    playTrack = track.solo;
+                } else {
+                    playTrack = !track.muted;
+                }
+                
+                if (playTrack && track.volume > 0.0f) {
+                    int numPulses = track.pulses.size();
+                    
+                    // Current Sample state
+                    int currBeatAbs = (int)currBeatFloat;
+                    int currPulse = currBeatAbs % numPulses;
+                    int currM = track.pulses[currPulse].subdivisions.size();
+                    int currSub = 0;
+                    if (currM > 0) {
+                        currSub = (int)((currBeatFloat - currBeatAbs) * currM);
+                        if (currSub >= currM) currSub = currM - 1;
+                    }
+                    
+                    // Previous Sample state
+                    int prevBeatAbs = -1;
+                    int prevPulse = -1;
+                    int prevSub = -1;
+                    if (_currentPosition > 0 && prevBeatFloat >= 0.0) {
+                        prevBeatAbs = (int)prevBeatFloat;
+                        prevPulse = prevBeatAbs % numPulses;
+                        int prevM = track.pulses[prevPulse].subdivisions.size();
+                        if (prevM > 0) {
+                            prevSub = (int)((prevBeatFloat - prevBeatAbs) * prevM);
+                            if (prevSub >= prevM) prevSub = prevM - 1;
+                        }
+                    }
+                    
+                    // If moving forward exactly into a new beat OR a new subdivision tick, trigger sound
+                    if (currBeatAbs != prevBeatAbs || currSub != prevSub) {
+                        if (currM > 0) {
+                            int type = track.pulses[currPulse].subdivisions[currSub];
+                            if (type == 1) volHigh = std::max(volHigh, track.volume);
+                            else if (type == 2) volLow = std::max(volLow, track.volume);
+                            else if (type == 3) volNoise = std::max(volNoise, track.volume);
+                        }
+                    }
+                }
             }
             
-            if (currentEighth > _lastEighth) {
-                _lastEighth = currentEighth;
-                int measurePos = (currentEighth % 6 + 6) % 6;
-                
-                // Read patterns (0: off, 1: High, 2: Low, 3: Noise)
-                int type34 = _pattern34[measurePos];
-                int type68 = _pattern68[measurePos];
-                
-                float volHigh = 0.0f;
-                float volLow = 0.0f;
-                float volNoise = 0.0f;
-                
-                // 3/4 Metronome Logic
-                bool play34 = true;
-                if (_anyStemSolo) {
-                    play34 = _metronome34Solo;
-                } else {
-                    play34 = !_metronome34Muted;
-                }
-                
-                if (play34 && _vol34 > 0.0f && type34 > 0) {
-                    if (type34 == 1) volHigh = std::max(volHigh, _vol34);
-                    else if (type34 == 2) volLow = std::max(volLow, _vol34);
-                    else if (type34 == 3) volNoise = std::max(volNoise, _vol34);
-                }
-                
-                // 6/8 Metronome Logic
-                bool play68 = true;
-                if (_anyStemSolo) {
-                    play68 = _metronome68Solo;
-                } else {
-                    play68 = !_metronome68Muted;
-                }
-                
-                if (play68 && _vol68 > 0.0f && type68 > 0) {
-                    if (type68 == 1) volHigh = std::max(volHigh, _vol68);
-                    else if (type68 == 2) volLow = std::max(volLow, _vol68);
-                    else if (type68 == 3) volNoise = std::max(volNoise, _vol68);
-                }
-                
-                if (volHigh > 0.0f && !_clickHigh.data.empty()) {
-                    _clickHigh.currentPointer = 0;
-                    _clickHigh.currentVolume = volHigh;
-                }
-                if (volLow > 0.0f && !_clickLow.data.empty()) {
-                    _clickLow.currentPointer = 0;
-                    _clickLow.currentVolume = volLow;
-                }
-                if (volNoise > 0.0f && !_clickNoise.data.empty()) {
-                    _clickNoise.currentPointer = 0;
-                    _clickNoise.currentVolume = volNoise;
-                }
+            if (volHigh > 0.0f && !_clickHigh.data.empty()) {
+                _clickHigh.currentPointer = 0;
+                _clickHigh.currentVolume = volHigh;
+            }
+            if (volLow > 0.0f && !_clickLow.data.empty()) {
+                _clickLow.currentPointer = 0;
+                _clickLow.currentVolume = volLow;
+            }
+            if (volNoise > 0.0f && !_clickNoise.data.empty()) {
+                _clickNoise.currentPointer = 0;
+                _clickNoise.currentVolume = volNoise;
             }
             
             float clickL = 0.0f;
@@ -598,8 +732,8 @@ extern "C" {
         if (mixer) delete static_cast<LiveMixer*>(mixer);
     }
     
-    EXPORT void live_mixer_add_track(void* mixer, const char* id, const float* data, int numSamples, int channels) {
-        static_cast<LiveMixer*>(mixer)->addTrack(id, data, numSamples, channels);
+    EXPORT LiveMixer::WaveformData* live_mixer_add_track(void* mixer, const char* id, const char* filePath) {
+        return static_cast<LiveMixer*>(mixer)->addTrack(id, filePath);
     }
     
     EXPORT void live_mixer_remove_track(void* mixer, const char* id) {
@@ -672,21 +806,27 @@ extern "C" {
         static_cast<LiveMixer*>(mixer)->setMetronomeSound(type, data, numSamples);
     }
 
-EXPORT void live_mixer_set_metronome_volume(void* mixer, float vol34, float vol68) {
+EXPORT void live_mixer_add_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo) {
     if (mixer) {
-        static_cast<LiveMixer*>(mixer)->setMetronomeVolume(vol34, vol68);
+        static_cast<LiveMixer*>(mixer)->addMetronomePattern(id, flatPatternData, subdivisionsData, numPulses, vol, mute, solo);
     }
 }
 
-EXPORT void live_mixer_set_metronome_mute(void* mixer, bool mute34, bool mute68) {
+EXPORT void live_mixer_update_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo) {
     if (mixer) {
-        static_cast<LiveMixer*>(mixer)->setMetronomeMute(mute34, mute68);
+        static_cast<LiveMixer*>(mixer)->updateMetronomePattern(id, flatPatternData, subdivisionsData, numPulses, vol, mute, solo);
     }
 }
 
-EXPORT void live_mixer_set_metronome_solo(void* mixer, bool solo34, bool solo68) {
+EXPORT void live_mixer_remove_metronome_pattern(void* mixer, int id) {
     if (mixer) {
-        static_cast<LiveMixer*>(mixer)->setMetronomeSolo(solo34, solo68);
+        static_cast<LiveMixer*>(mixer)->removeMetronomePattern(id);
+    }
+}
+
+EXPORT void live_mixer_clear_metronome_patterns(void* mixer) {
+    if (mixer) {
+        static_cast<LiveMixer*>(mixer)->clearMetronomePatterns();
     }
 }
 
@@ -702,15 +842,24 @@ EXPORT void live_mixer_set_master_solo(void* mixer, bool solo) {
     }
 }
 
-EXPORT void live_mixer_set_metronome_pattern(void* mixer, const int* pattern34, const int* pattern68) {
-    if (mixer) {
-        static_cast<LiveMixer*>(mixer)->setMetronomePattern(pattern34, pattern68);
-    }
-}
-
 EXPORT void live_mixer_set_metronome_preview_mode(void* mixer, bool enabled) {
     if (mixer) {
         static_cast<LiveMixer*>(mixer)->setMetronomePreviewMode(enabled);
     }
 }
+
+    EXPORT void live_mixer_free_waveform_data(LiveMixer::WaveformData* data) {
+        if (data) {
+            if (data->peakData) {
+                free(data->peakData);
+            }
+            delete data;
+        }
+    }
+    
+    EXPORT int live_mixer_render_offline(void* mixer, const char* outPath) {
+        // To be implemented later.
+        return 0;
+    }
+
 }

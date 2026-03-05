@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:elongacion_musical/providers/mixer_provider.dart';
 import 'package:elongacion_musical/models/track_model.dart';
-import 'package:elongacion_musical/widgets/track_strip.dart';
+import 'package:elongacion_musical/widgets/mixer/track_strip.dart';
 
 class TrackListSection extends StatelessWidget {
   final bool showWaveform;
@@ -19,34 +19,28 @@ class TrackListSection extends StatelessWidget {
       builder: (context, activeTracks, child) {
         if (activeTracks.isEmpty) return const SizedBox.shrink();
 
-        return ListView.builder(
-          scrollDirection: Axis.horizontal,
-          itemCount: activeTracks.length,
-          itemBuilder: (context, index) {
-            final track = activeTracks[index];
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: activeTracks.map((track) {
             final mixer = context.read<MixerProvider>();
-            return KeyedSubtree(
-              key: ValueKey(track.id),
-              child: TrackStrip(
-                width: itemWidth,
-                track: track,
-                showWaveform: showWaveform,
-                useKnobForVolume: useKnobForVolume,
-                onVolumeChanged: (val) {
-                  mixer.setTrackVolume(track.id, val);
-                },
-                onVolumeChangeEnd: (val) {
-                  mixer.commitTrackVolume();
-                },
-                onPanChanged: (val) {
-                  mixer.setTrackPan(track.id, val);
-                },
-                onMuteToggle: () => mixer.toggleTrackMute(track.id),
-                onSoloToggle: () => mixer.toggleSolo(track.id),
-                isSoloed: track.isSolo,
+            return Expanded(
+              child: KeyedSubtree(
+                key: ValueKey(track.id),
+                child: TrackStrip(
+                  width: itemWidth,
+                  track: track,
+                  showWaveform: showWaveform,
+                  useKnobForVolume: useKnobForVolume,
+                  onVolumeChanged: (val) => mixer.setTrackVolume(track.id, val),
+                  onVolumeChangeEnd: (val) => mixer.commitTrackVolume(),
+                  onPanChanged: (val) => mixer.setTrackPan(track.id, val),
+                  onMuteToggle: () => mixer.toggleTrackMute(track.id),
+                  onSoloToggle: () => mixer.toggleSolo(track.id),
+                  isSoloed: track.isSolo,
+                ),
               ),
             );
-          },
+          }).toList(),
         );
       }
     );

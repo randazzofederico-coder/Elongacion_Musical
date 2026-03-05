@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:elongacion_musical/constants/app_colors.dart';
 
 class LoopRulerPainter extends CustomPainter {
   final int bpm;
@@ -11,6 +12,10 @@ class LoopRulerPainter extends CustomPainter {
   final bool isLoopEnabled;
   final double zoomLevel;
   final double scrollOffset;
+  final Color borderColor;
+  final Color textSecondaryColor;
+  final Color textPrimaryColor;
+  final Color accentColor;
 
   LoopRulerPainter({
     required this.bpm,
@@ -23,6 +28,10 @@ class LoopRulerPainter extends CustomPainter {
     required this.isLoopEnabled,
     required this.zoomLevel,
     required this.scrollOffset,
+    required this.borderColor,
+    required this.textSecondaryColor,
+    required this.textPrimaryColor,
+    required this.accentColor,
   });
 
   @override
@@ -34,11 +43,11 @@ class LoopRulerPainter extends CustomPainter {
     final double totalMs = duration.inMilliseconds.toDouble();
     
     final Paint linePaint = Paint()
-      ..color = Colors.white24
+      ..color = borderColor
       ..strokeWidth = 1.0;
 
     final Paint measurePaint = Paint()
-      ..color = Colors.white54
+      ..color = textSecondaryColor
       ..strokeWidth = 2.0;
 
     final TextPainter textPainter = TextPainter(
@@ -94,7 +103,7 @@ class LoopRulerPainter extends CustomPainter {
             
             textPainter.text = TextSpan(
               text: '$displayMeasureNum',
-              style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+              style: TextStyle(color: textPrimaryColor, fontSize: 10, fontWeight: FontWeight.bold),
             );
             textPainter.layout();
             textPainter.paint(canvas, Offset(screenX + 2, 0));
@@ -130,7 +139,7 @@ class LoopRulerPainter extends CustomPainter {
         ..lineTo(screenEndX, size.height)
         ..close();
 
-      final Paint handlePaint = Paint()..color = Colors.cyanAccent;
+      final Paint handlePaint = Paint()..color = accentColor;
       canvas.drawPath(startHandle, handlePaint);
       canvas.drawPath(endHandle, handlePaint);
       
@@ -140,7 +149,7 @@ class LoopRulerPainter extends CustomPainter {
       
       if (highlightEndX > highlightStartX) {
         final Rect highlightRect = Rect.fromLTRB(highlightStartX, size.height * 0.8, highlightEndX, size.height);
-        canvas.drawRect(highlightRect, Paint()..color = Colors.cyanAccent.withValues(alpha: 0.3));
+        canvas.drawRect(highlightRect, Paint()..color = accentColor.withValues(alpha: 0.3));
       }
     }
   }

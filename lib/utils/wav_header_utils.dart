@@ -23,3 +23,16 @@ Uint8List buildWavHeader(int samples, int sampleRate, int numChannels) {
    view.setUint32(40, dataSize, Endian.little);
    return buffer;
 }
+
+/// Converts a list of floats [-1.0, 1.0] to a 16-bit PCM byte array for WAV.
+Uint8List floatToBytes(List<double> samples) {
+    final buffer = Uint8List(samples.length * 2);
+    final view = ByteData.view(buffer.buffer);
+    for (int i = 0; i < samples.length; i++) {
+        double val = samples[i];
+        if (val > 1.0) val = 1.0;
+        else if (val < -1.0) val = -1.0;
+        view.setInt16(i * 2, (val * 32767).toInt(), Endian.little);
+    }
+    return buffer;
+}

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:elongacion_musical/providers/mixer_provider.dart';
-import 'package:elongacion_musical/widgets/master_strip.dart';
+import 'package:elongacion_musical/widgets/mixer/master_strip.dart';
 
 class MasterSection extends StatelessWidget {
   final bool showWaveform;

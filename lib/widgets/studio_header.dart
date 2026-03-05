@@ -6,24 +6,25 @@ import 'package:provider/provider.dart';
 
 class StudioHeader extends StatelessWidget {
   final String title;
-  final bool isOfflineMode;
   final Widget? leading;
-  
-  const StudioHeader({super.key, required this.title, this.isOfflineMode = false, this.leading});
+  const StudioHeader({super.key, required this.title, this.leading});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: AppColors.border,
-            width: 1,
-          ),
-        ),
+      margin: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 8), // Floating margins
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(24), // Pill shape
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -35,22 +36,16 @@ class StudioHeader extends StatelessWidget {
                 leading!,
                 const SizedBox(width: 8),
               ],
-              const Icon(Icons.equalizer, color: AppColors.accentCyan, size: 20),
+              Icon(Icons.equalizer, color: AppColors.accentCyan(context), size: 20),
               const SizedBox(width: 8),
               Text(
                 title.toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
+                style: TextStyle(
+                  color: AppColors.textPrimary(context),
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.5,
                   fontSize: 14,
                 ),
-              ),
-              const SizedBox(width: 12),
-              _StatusIndicator(
-                 label: isOfflineMode ? "OFFLINE" : "REALTIME",
-                 active: true,
-                 color: isOfflineMode ? Colors.orange : AppColors.accentCyan,
               ),
             ],
           ),
@@ -59,7 +54,7 @@ class StudioHeader extends StatelessWidget {
           Row(
             children: [
                IconButton(
-                 icon: const Icon(Icons.settings, color: AppColors.textSecondary, size: 20),
+                 icon: Icon(Icons.settings, color: AppColors.textSecondary(context), size: 20),
                  onPressed: () {
                    Navigator.of(context).push(
                      MaterialPageRoute(
@@ -81,32 +76,3 @@ class StudioHeader extends StatelessWidget {
   }
 }
 
-class _StatusIndicator extends StatelessWidget {
-  final String label;
-  final bool active;
-  final Color color;
-
-  const _StatusIndicator({required this.label, required this.active, this.color = AppColors.accentCyan});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: active ? color.withValues(alpha: 0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(
-          color: active ? color.withValues(alpha: 0.3) : Colors.transparent,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-           fontSize: 10,
-           fontWeight: FontWeight.bold,
-           color: active ? color : Colors.grey,
-        ),
-      ),
-    );
-  }
-}

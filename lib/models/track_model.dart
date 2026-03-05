@@ -41,14 +41,15 @@ class TrackModel extends ChangeNotifier {
     }
   }
 
-  // PCM Data: List of channels, each containing samples
-  List<Float32List>? samples;
+  // PCM Data depends strictly on Native Engine now. 
+  // No references kept in Dart to ensure Zero-Copy architecture.
   
   // Visualization Data: List of channels, each containing downsampled peaks (0.0 to 1.0)
   List<List<double>> waveformData = [];
   
   // Format info
   int? sampleRate;
+  int? totalFrames;
 
   TrackModel({
     required this.id,

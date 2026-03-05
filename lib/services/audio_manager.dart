@@ -3,11 +3,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:just_audio/just_audio.dart';
 import 'package:wav/wav.dart';
+import 'dart:ffi';
+import 'package:ffi/ffi.dart';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:native_audio_engine/live_mixer_bindings.dart';
+import 'package:native_audio_engine/live_mixer.dart';
 import 'package:elongacion_musical/models/track_model.dart';
 import 'package:elongacion_musical/services/mixer_stream_source.dart';
 import 'package:elongacion_musical/services/settings_service.dart';
-import 'package:elongacion_musical/utils/wav_parser.dart';
+import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_audio/return_code.dart';
 import 'dart:math';
 
 
@@ -81,7 +87,6 @@ class AudioManager {
   Timer? _positionTimer;
   
   // -- Mode --
-  AudioEngineMode get mode => AudioEngineMode.realtime; // Fixed for now
 
   // -- Master --
   double _masterVolume = 1.0;
@@ -91,6 +96,9 @@ class AudioManager {
   double _metronomeVol34 = 0.0;
   double _metronomeVol68 = 0.0;
   int? _currentBpm;
+
+  // Add a getter that defaults to 120 if _currentBpm is null
+  int get currentBpm => _currentBpm ?? 120;
 
   double get metronomeVol34 => _metronomeVol34;
   double get metronomeVol68 => _metronomeVol68;
@@ -102,109 +110,130 @@ class AudioManager {
   Future<void> loadTracks(List<Map<String, String>> trackConfigs) async {
     try {
       await stop();
+      _source?.dispose();
+      _source = null;
       _tracks.clear();
       
-      // Load WAVs in parallel/sequence
-      // We need to read the files to get PCM data for TrackModel
-      
+      final liveMixer = LiveMixer();
       List<TrackModel> loadedTracks = [];
+      
+      int maxSamples = 0;
+      int globalSampleRate = 44100;
       
       for (var config in trackConfigs) {
         final id = config['id']!;
         final path = config['path']!; // Absolute path to file
         final name = config['name'] ?? 'Track';
         
-        // Read WAV
-        // Note: For large files, this should be in an isolate. 
-        final WavData wavData;
+        String physicalPath = path;
+        File? tempFile;
+        File? ffmpegOutputFile;
+        
+        // Extract asset to temp file if necessary
         if (path.startsWith('assets/')) {
-          final data = await rootBundle.load(path);
-          wavData = await compute(parseWavBytes, data.buffer.asUint8List());
-        } else {
-           // For local files, read bytes then parse in isolate
-           final fileData = await File(path).readAsBytes();
-           wavData = await compute(parseWavBytes, fileData);
+             try {
+                 final data = await rootBundle.load(path);
+                 final tempDir = await getTemporaryDirectory();
+                 final ext = path.split('.').last;
+                 tempFile = File('${tempDir.path}/temp_${id}_${DateTime.now().millisecondsSinceEpoch}.$ext');
+                 await tempFile.writeAsBytes(data.buffer.asUint8List());
+                 physicalPath = tempFile.path;
+                 print("NativeAudioEngine: Wrote asset to temporary file: $physicalPath");
+             } catch (e) {
+                 print("NativeAudioEngine warning: Failed to load asset $path. Skipping track.");
+                 continue;
+             }
         }
+        
+        // Check file exists
+        if (!File(physicalPath).existsSync()) {
+           throw Exception("Native decoder error: Temp file does not exist at $physicalPath");
+        }
+        
+        bool useFfmpeg = Platform.isAndroid || Platform.isLinux;
+        if (useFfmpeg && !physicalPath.toLowerCase().endsWith('.wav')) {
+             final tempDir = await getTemporaryDirectory();
+             ffmpegOutputFile = File('${tempDir.path}/decoded_${id}_${DateTime.now().millisecondsSinceEpoch}.wav');
+             
+             final command = "-i \"$physicalPath\" -c:a pcm_s16le -ar 44100 \"${ffmpegOutputFile.path}\"";
+             final session = await FFmpegKit.execute(command);
+             final returnCode = await session.getReturnCode();
+             
+             if (ReturnCode.isSuccess(returnCode)) {
+                physicalPath = ffmpegOutputFile.path;
+                print("FFMPEG: Decoded natively to $physicalPath");
+             } else {
+                print("FFMPEG: Failed to decode $physicalPath. Attempting to pass to miniaudio anyway.");
+             }
+        }
+        
+        // Call C++ Loader (Zero-Copy flow: C++ retains the audio internally)
+        final wavePtr = liveMixer.addTrack(id, physicalPath);
+        
+        if (wavePtr == null || wavePtr.ref.error != 0) {
+           int errorCode = wavePtr?.ref.error ?? -999;
+           if (wavePtr != null) liveMixer.freeWaveformData(wavePtr);
+           if (tempFile != null) await tempFile.delete();
+           if (ffmpegOutputFile != null) await ffmpegOutputFile.delete();
+           throw Exception("Miniaudio ERROR CODE: $errorCode when trying to decode $path.");
+        }
+        
+        final decoded = wavePtr.ref;
+        final sampleCount = decoded.totalFrames * decoded.channels;
+        final channels = decoded.channels;
+        final sr = decoded.sampleRate;
+        final totalFrames = decoded.totalFrames;
+        
+        // Extract low-res visual Waveform generated instantly by C++
+        List<List<double>> waveform = [];
+        int pointsPerChannel = decoded.peakDataLength ~/ channels;
+        
+        for (int c = 0; c < channels; c++) {
+            List<double> channelPeaks = [];
+            for (int p = 0; p < pointsPerChannel; p++) {
+                channelPeaks.add(decoded.peakData[c * pointsPerChannel + p]);
+            }
+            waveform.add(channelPeaks);
+        }
+        
+        // Clean up C++ Waveform Memory immediately (audio data stays in LiveMixer track registry)
+        liveMixer.freeWaveformData(wavePtr);
+        
+        // Cargar audios completos y mantener RAM es INNECESARIO. Eliminamos el caché del disco.
+        if (tempFile != null) await tempFile.delete();
+        if (ffmpegOutputFile != null) await ffmpegOutputFile.delete();
 
         final track = TrackModel(
           id: id,
           name: name,
           assetPath: path,
         );
-        track.samples = wavData.samples;
-        track.waveformData = wavData.waveform;
-        track.sampleRate = wavData.sampleRate;
+        track.waveformData = waveform;
+        track.sampleRate = sr;
+        track.totalFrames = totalFrames;
         
         loadedTracks.add(track);
+        
+        if (totalFrames > maxSamples) maxSamples = totalFrames;
+        if (sr > globalSampleRate) globalSampleRate = sr;
       }
       
       _tracks = loadedTracks;
       
-      
-      // RE-DO optimized loading:
-      // We need a helper that returns (TrackModel, sampleRate, totalSamples).
-      
-      await _initializeMixer();
-      
-    } catch (e) {
-      debugPrint("AudioManager: Error loading tracks: $e");
-      throw e;
-    }
-  }
-  
-  // Better load implementation
-  Future<void> _initializeMixer() async {
-      if (_tracks.isEmpty) return;
-      
-      // Scan for max duration and sample rate
-      int maxSamples = 0;
-      int sampleRate = 44100;
-      
-      // Use the highest sample rate found to avoid downsampling quality loss?
-      // Or use the first one?
-      // Ideally all tracks should match. If not, the current simple mixer might drift or pitch-shift mismatched tracks.
-      // But at least we should match the PLAYER to the CONTENT.
-      for (var t in _tracks) {
-          if (t.sampleRate != null && t.sampleRate! > sampleRate) {
-              sampleRate = t.sampleRate!;
-          }
-      }
-      
-      // We actually need the wav info. 
-      // Since we already loaded samples into TrackModel, we might have lost sampleRate.
-      // But usually all tracks in a session match.
-      // Let's assume 44100 if we can't find it, or peek the first file again?
-      // Optimization: The user is likely passing file paths.
-      
-      // Ideally TrackModel should hold format info.
-      // For this immediate fix, let's just peek one file if possible, or use standard.
-      // Or just rely on what we have.
-      
-      // Let's update `loadTracks` to be better in a moment.
-      // For now, let's assume `initializeMixerTracks` handles the data.
-      
-      // Create Source
-      // We need `totalSamples` for the stream.
-      for (var t in _tracks) {
-          if (t.samples != null && t.samples!.isNotEmpty) {
-              int len = t.samples![0].length;
-              if (len > maxSamples) maxSamples = len;
-          }
-      }
-      
       // Calculate Latency Hint
-      // Current Configured Buffer + Hardware Est
-      Duration latency = const Duration(milliseconds: 200); // Default/Desktop
+      Duration latency = const Duration(milliseconds: 200); 
       if (Platform.isAndroid || Platform.isIOS) {
          latency = kMobileBuffer + kHardwareLatencyEst;
       }
       
+      // Initialize Source wrapping the pre-loaded C++ Mixer
       _source = MixerStreamSource(
+         liveMixer,
          _tracks, 
          maxSamples, 
-         sampleRate,
+         globalSampleRate,
          getMasterVolume: () => _masterVolume,
-         getPosition: () => Duration.zero, // No longer used for sync
+         getPosition: () => Duration.zero,
          isBuffering: () => false,
          latencyHint: latency, 
       );
@@ -218,12 +247,21 @@ class AudioManager {
           _source!.setMetronomeConfig(_currentBpm!);
       }
       
-      // DISCONNECT JUST_AUDIO FROM MIXER
-      // await _player.setAudioSource(_source!); 
-      // Instead, we just use the source directly.
-      
-      // Update Duration Stream Manually
+      // Update custom streams
       _durationController.add(_source!.sourceDuration);
+      
+      // Set initial volume/pan restoring config
+      for (var track in _tracks) {
+          liveMixer.setVolume(track.id, track.volume);
+          liveMixer.setPan(track.id, track.pan);
+          liveMixer.setMute(track.id, track.isMuted);
+          liveMixer.setSolo(track.id, track.isSolo);
+      }
+      
+    } catch (e) {
+      debugPrint("AudioManager: Error loading tracks: $e");
+      throw e;
+    }
   }
   
   

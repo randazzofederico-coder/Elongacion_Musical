@@ -1,261 +1,67 @@
 # PROYECTO: Elongación Musical (App Multipista Educativa)
 
-## 1. TECH STACK & DEPENDENCIAS
+## 1. TECH STACK & CONFIGURATION
 - **Framework:** Flutter (Dart).
-- **Audio Engine:** `just_audio` (multi-platform), `just_audio_windows` (Windows).
-- **Native Plugin:** `native_audio_engine` (C++ with SoundTouch, local patches for Windows).
+- **Audio Engine:** `just_audio` (Platform) + `native_audio_engine` (Custom C++ Plugin using Miniaudio & SoundTouch).
 - **State Management:** `Provider`.
-- Assets: Archivos MP3/WAV locales ubicados en `assets/audio/`.
-
-## 1.1 VERSION CONTROL
+- **Assets:** Audio library migrated to M4A/AAC format in `assets/audio/` for extreme compression without padding artifacts. Decodes to `Float32` RAM arrays during playback initialization for zero-latency mixing. In Android, uses `ffmpeg_kit_flutter_new_audio` for temporary WAV cache extraction when OS decoding fails.
 - **Repository:** [GitHub - Elongacion_Musical](https://github.com/randazzofederico-coder/Elongacion_Musical.git)
-- **Branch Strategy:** `master` (Protected/Main).
-- **Status:** Connected and synced (Feb 2026).
+- **Status:** Connected and synced.
 
-## 1.2 CURRENT APP STATE And OBJECTIVES
-> [!NOTE]
-> **Current Focus:** Codebase Optimization & Stability.
-
-- **Objective:** Ensure all large files are refactored into smaller, maintainable modules (< 200 lines). Verification of native C++ Mixer stability on Windows/Android.
-- **Actual State:**
-  - Refactoring Complete: `MixerScreen`, `AudioManager`, `MixerStreamSource`, `WaveformSeekBar`, `TrackStrip`.
-  - Native Mixer: Implemented and active (`MixerStreamSource`).
-  - Audio Engine: `just_audio` + C++ mix loop working.
-  - Architecture: Modularized with `utils/` and `widgets/mixer/`.
-  - **Optimizations (Feb 2026):**
-    - **Memory:** Switched internal audio pipeline to `Float32` (50% RAM reduction).
-    - **Glitch Fix:** Removed artificial pacing barriers; engine now feeds player on demand.
-    - **Seek:** Instant response via `AudioLoadConfiguration` (400ms buffer).
-  - **Runtime Stability:** Android Asset Loading (rootBundle) & Background Waveform Generation fixed.
-
-## 1.1 TESTING FOCUS & PLATFORM STRATEGY (CRITICAL)
-> [!IMPORTANT]
-> **CURRENT TESTING FOCUS: ANDROID (TABLET & PHONE)**.
-> All development and verification should prioritize the Android experience, specifically:
-> - Low Latency audio response.
-> - Touch interactions (Faders, Knobs).
-> - Screen real estate usage (SafeArea, Navigation Bars).
-
-### Platform-Specific Audio Engines
-- **Android / iOS:**
-  - **Goal:** Real-time performance, low latency (~40ms-100ms).
-  - **Implementation:**
-    - **Buffer:** `AudioLoadConfiguration` set to **400ms** (Instant Seek).
-    - **Pacing:** Removed "Smart Pacing" (Sleeps); relying on `just_audio` pull-request frequency.
-    - **Latency Compensation:** Calculated `latencyHint` (Buffer + ~100ms Hardware) passed to UI.
-  - **Status:** **ACTIVE TESTING**.
-- **Windows / Desktop:**
-  - **Goal:** Stability over speed.
-  - **Implementation:** Relaxed pacing, larger buffers (~4s latency) to prevent driver underruns.
-  - **Status:** **FUTURE / ON HOLD**. Do not optimize for Windows at the expense of Android.
-
-## 2. ESTRUCTURA DE CARPETAS
-### Assets de Audio (Data Catalog)
-Estructura jerárquica para cargar dinámicamente los audios reales.
-- **Audios Oficiales (Nuevos Capítulos 1, 2 y 3):**
-  - Ubicación: `assets/audio/Con instrumento/Capitulo N/`
-  - Archivos Ejercicios: Formato `Capitulo N-Ej M-Instrumento.wav` (Instrumentos: `Fl Solista`, `Piano`, `Contrabajo`, `Bombo`). (Capítulo 3 a veces usa `Fl1` y `Fl2` en lugar de `Fl Solista`).
-  - Archivos Dúos: Formato `Capitulo N-Duo-Instrumento.wav` (Instrumentos: `Fl1`, `Fl2`, `Piano` (solo caps 2 y 3), `Contrabajo`, `Bombo`).
-
-**Convención para Canales:**
-- `Piano`: **STEREO** (Mantener espacialidad para la mezcla final).
-- Resto (`Flauta`, `Contrabajo`, `Bombo`): **MONO** (Para ahorrar RAM y CPU).
-
-### Navegación (Nueva Arquitectura)
-- **MenuScreen:** Lista principal dividida en secciones (Ritmo vs Instrumento).
-- **ChapterScreen:** Detalle del capítulo con lista de ejercicios.
-- **MixerScreen:** "Motor" de reproducción, se instancia con un `Exercise` específico.
+## 2. APP ARCHITECTURE & DIRECTORY STRUCTURE
+The app uses a strict separation between UI components, state Providers, and Native C++ Audio integration to avoid monolithic files (following a < 200 lines per file standard where possible).
 
 ```
 lib/
 ├── models/
-│   ├── catalog_model.dart     # Definición de Chapter, Exercise, TrackData.
-│   └── track_model.dart       # Estado volátil de la pista (Volumen, Pan, Mute).
+│   ├── catalog_model.dart     # Definitions: Chapter, Exercise, TrackData
+│   └── track_model.dart       # Volatile track state (Volume, Pan, Mute)
 ├── services/
-│   ├── audio_manager.dart     # Gestión de alto nivel. Delega análisis a utils.
-│   └── mixer_stream_source.dart # Motor de mezcla nativo.
+│   ├── audio_manager.dart     # High-level audio playback and FFI coordinator
+│   ├── mixer_stream_source.dart # just_audio custom source bridging
+│   └── settings_service.dart  # Persists UI & Audio preferences locally
 ├── providers/
-│   ├── mixer_provider.dart          # Facade principal y coordinador.
-│   ├── playback_provider.dart       # (New) Estado de reproducción (Play, Seek, Loop).
-│   ├── track_list_provider.dart     # (New) Estado de la lista de pistas, mute, solo, vol.
-│   └── mixer_settings_provider.dart # (New) Perfiles de Time-Stretching y toggles de UI.
-├── utils/
-│   ├── audio_analysis_utils.dart # (New) Lógica de decodificación y picos.
-│   ├── mixer_utils.dart          # (New) Inicialización de pistas nativas.
-│   ├── wav_header_utils.dart     # (New) Generación de headers WAV.
-│   └── waveform_utils.dart       # (New) Generación de onda master.
-├── constants/
-│   └── app_colors.dart        # Paleta de colores "Dark Studio".
+│   ├── mixer_provider.dart          # Main facade and State coordinator
+│   ├── playback_provider.dart       # Play, Seek, Loop states
+│   ├── track_list_provider.dart     # Track volumes, mute, solo states
+│   ├── mixer_settings_provider.dart # Engine settings & UI toggles
+│   └── theme_provider.dart          # Global Light/Dark mode state management
 ├── screens/
-│   └── mixer_screen.dart      # Pantalla principal (Layout de alto nivel).
+│   └── mixer_screen.dart      # Main mixing console layout
 └── widgets/
-    ├── mixer/                 # (New) Componentes de la Mixer Screen.
-    │   ├── track_list_section.dart
-    │   ├── master_section.dart
-    │   ├── transport_section.dart
-    │   └── track_controls.dart   # (New) Controles de pista (Fader, Knob, Mute/Solo).
-    ├── waveform/              # (New) Componentes de visualización y control de onda.
-    │   ├── waveform_painter.dart              # Logic de pintado de ondas.
-    │   ├── loop_ruler_painter.dart            # Renderizado del grid musical.
-    │   ├── loop_ruler.dart                    # (New) Renderizado de marcadores y regla.
-    │   └── waveform_interaction_controller.dart # (New) Gestión de estado de gestos y zoom.
-    ├── studio_header.dart     # Header customizado.
-    ├── track_strip.dart       # Layout del canal individual.
-    ├── master_strip.dart      # Layout del canal master.
-    ├── vertical_waveform.dart # Visualizador de onda vertical.
-    ├── fader_control.dart     # Slider customizado.
-    ├── knob_control.dart      # Control rotatorio.
-    └── waveform_seek_bar.dart # Barra de navegación (ahora usa WaveformPainter).
+    ├── mixer/                 # Granular UI components for the Mixer
+    │   ├── channel_strip_container.dart # Shared base layout for strips
+    │   ├── track_strip.dart      # Individual track styling
+    │   ├── master_strip.dart     # Master fader styling
+    │   └── transport_section.dart # Playback controls
+    └── waveform/              # Audio visualization components
+        ├── waveform_painter.dart
+        └── waveform_interaction_controller.dart # Multi-touch & Zoom management
 ```
 
-## 3. ENGINE DE AUDIO (Native C++ Mixer)
-## 3. ENGINE DE AUDIO (Native Audio Engine)
-- **Core:** `native_audio_engine` (Miniaudio + Custom Phase Vocoder / KissFFT + C++ Logic).
-- **Playback Strategy:** `MixerStreamSource` delegates control to `LiveMixer`.
-  - **Status:** **ACTIVE**. Mixing, Time-Stretching, and Timing are handled exclusively by C++.
-  - **Data Path:** `Float32` optimized. WAV -> Memory -> FFI -> C++ `LiveMixer`.
-  - **Mixer Pipeline:** `Tracks` -> `Master Fader (Layer 1)` -> `Stem Routing (Layer 2)` -> `Vocoder (Time Stretch)` -> `Miniaudio Output`.
-  - **Routing Logic (Layered Stems):** Implements specialized "Stem Solo" architecture. 
-    - **Layer 1 (Track Bus):** Instrument tracks internally Solo-in-Place against other instruments.
-    - **Layer 2 (Stems):** The Master Bus, Metronome 3/4, and Metronome 6/8 exist as independent Stems. Soloing a Metronome mutes the Master Bus, and soloing the Master Bus mutes the Metronomes.
-    - **Click Prevention:** All dynamic volume changes (Mute/Solo/Play/Pause/Seek) utilize a 20ms fade envelope to prevent zero-crossing "chasquidos" (audio pops).
-    - This guarantees that UI "Mute" interactions do not destructively alter the users' perfectly tuned fader volumes.
-- **Timing & Synchronization (The "Atomic Clock"):**
-  - **Source of Truth:** An atomic frame counter in the C++ audio callback.
-  - **UI Sync:** Dart polls this atomic counter at 60fps via `Ticker` in `WaveformSeekBar`.
-  - **Playhead:** Reflects exactly what samples are being sent to the DAC (hardware compensated).
-- **Time Stretching (SoundTouch Engine):**
-  - **Implementation:** Reverted to the highly optimized `SoundTouch` library (C++) from the experimental Phase Vocoder, significantly lowering CPU footprint.
-  - **Efficiency:** Zero-copy processing. Audio buffer stays in C++ memory. Compiled with advanced DSP flags (`-O3`, `-ffast-math`) on Android to prevent CPU starvation in real-time.
-  - **Control:** `setSpeed()` updates tempo in real-time.
-  - **Tuning UI:** Added debug sliders to the Settings screen to expose WSOLA parameters (`Sequence`, `SeekWindow`, `AAFilter Length`), allowing the user to mitigate "metallic" artifacts depending on the audio source (rhythmic vs melodic).
-- **Audio Tools:**
-  - `tool/convert_to_mono.dart`: Script utilitario para convertir recursivamente todos los archivos de una carpeta a MONO, *excepto* `piano.wav`.
-    - Usage: `dart tool/convert_to_mono.dart`
+## 3. UI / UX ("Warm Premium Studio")
+The design mimics classic analog hardware using dynamic responsive layouts.
+- **Responsiveness Layout:** `MixerScreen` uses an `Expanded` `Row` to distribute tracks horizontally. It automatically hides waveforms on screens < 600px width to prioritize control access. To support narrow mobile screens (e.g., 320px), fixed-width constraints are strictly avoided in favor of `Expanded`, `Flexible`, and `FittedBox`, completely preventing horizontal `RenderFlex` overflow errors.
+- **Orientation Strategy:** To ensure a predictable and robust mixing console experience on varying mobile form factors, the application globally enforces Portrait orientation (`portraitUp`, `portraitDown`) at startup via `SystemChrome`.
+- **Pixel-Perfect Margins:** The application strictly enforces consistent lateral margins (`16px`) across unrelated screen components (`StudioHeader`, `TrackListSection`, `WaveformSeekBar`, `TransportSection`). This often requires mathematically neutralizing internal paddings of child widgets (e.g., dynamically offsetting a parent container's padding to cleanly account for a child's native margin).
+- **Canvas Clipping:** Custom drawn elements (like `LoopRuler` using `CustomPaint`) are explicitly wrapped in `ClipRect` to prevent their rendering instructions from exceeding their designated layout boundaries during interactions like zoom or pan.
+- **Mixer Strip Symmetry:** Strip layouts (Tracks vs Master) are strictly synchronized by confining their bottom control sections (knobs/buttons) to mathematically identical fixed-height containers (e.g., `110px`), allowing the `Expanded` faders above them to fluidly fill the remaining screen space in perfect symmetry without `RenderFlex` overflows.
+- **Native Layout Bounds:** Avoids using `Transform.scale` for resizing layout-critical widgets (like `KnobControl`). Widgets must provide a native `size` property to ensure Flutter calculates their layout footprint accurately instead of drawing invisible padding bounds.
+- **Dynamic Theming & Context-Aware Colors:** UI components utilize `AppColors.methodName(context)` instead of static colors. The application responds globally to Light/Dark Mode toggles routed through the `ThemeProvider` at the root of the app, ensuring seamless and state-driven aesthetic consistency.
+- **Waveform Interaction:** `WaveformInteractionController` provides 1x-50x multi-touch pinch-to-zoom and two-finger pan on the master waveform.
+- **Settings Persistence:** `SettingsService` automatically saves global variables (dark mode, layout) and exercise-specific variables (volumes, loop ranges, pans, mutes) individually keyed by Exercise ID via `SharedPreferences`.
 
-### 3.1 ENGINE MODES & PLATFORM SPECIFICS
-- **Realtime Mode (Default):**
-  - Uses `MixerStreamSource` for just-in-time mixing.
-  - **Android/iOS:** Optimized for **Low Latency**. 
-    - `AudioManager` uses small buffer config (min ~500ms).
-    - `MixerStreamSource` uses tight pacing (hard limit ~2.0s).
-    - Result: Instant response to Fader/Mute/Solo changes.
-  - **Windows/Desktop:** Optimized for **Stability**.
-    - `AudioManager` uses larger default buffers.
-    - `MixerStreamSource` uses larger internal chunks.
-    - Result: Latency is higher to prevent playback stalls.
-- **Safe Mode (Offline Rendering):**
-  - **Architecture:** `AudioRenderer` class uses `AudioProcessor` (Legacy Dart wrapper) to render. *Note: Need to verify if this is still compatible with new Native structure.*
+## 4. AUDIO ENGINE (Native C++ Mixer)
+Driven by a custom C++ engine (`live_mixer.cpp`) connected to Dart via FFI, achieving "Zero-Copy" playback.
+- **Data Flow:** M4A/AAC -> PCM RAM Buffer -> C++ LiveMixer -> DAC via Miniaudio.
+- **Mixing Pipeline:** `Tracks` -> `Master Fader (Layer 1)` -> `Stem Routing Layer (Metronome & Master)` -> `Time Stretch (SoundTouch)` -> `Miniaudio Output`.
+- **Latency & Sync:** The Native engine drives an atomic frame counter. Dart polls this counter at 60fps via `Ticker` for sample-accurate UI synchronization.
+- **Time Stretching:** Standardized on `SoundTouch` (C++) compiled with maximum DSP optimizations (`-O3 -ffast-math`). Settings (Sequence, SeekWindow, Overlap) are configured real-time via `SettingsService`.
+- **Dynamic Analytical Metronome:** C++ Math-driven software oscillator. No pre-rendered `.wav` files required. Dart passes complex 2D arrays (N-Pulses x M-Subdivisions) flattened via FFI pointers dynamically. Each instance tracks its own custom sequencer grids (e.g., 5/4 alongside 4/4). It features a robust text-input parsing system with a tailored Virtual Keyboard allowing users to define asymmetric structures (e.g., `3+2`) and fractional subdivisions (e.g., `1/3+2`) instantly.
+- **Micro & Macro Visualization:** Uses a "Split-Cell" UI for subdivisions, maintaining a linear timeline by intelligently dividing pulse containers. The `MetronomeProvider` calculates the Least Common Multiple (LCM) of all asynchronous metronome tracks to establish a unified "Macro Cycle". A minimalist UI `Ticker` polls the C++ atomic engine frame-counter at 60fps to accurately trace playback progress across a miniaturized, anatomically correct global cycle bar.
+- **Pop Prevention:** Every dynamic volume change (Mute/Solo/Play/Pause/Seek) uses an interpolated 20ms fade envelope to avoid hardware zero-crossing clicks.
 
-### 3.2 PROCEDURAL METRONOME
-- **Architecture:** C++ Math-driven procedural click generator. No pre-rendered `.wav` files required per exercise.
-- **Implementation:**
-  - Dart generates single-cycle sine/noise arrays (`Float32List`) with exponential decay and passes them to C++ FFI on boot (`setMetronomeSound`).
-  - `LiveMixer.cpp` calculates eighth-note boundaries based on the `target BPM` and atomic frame position.
-  - A 6-step integer array sequencer dictates the pattern (`1`=High, `2`=Low, `3`=Mid).
-- **Benefits:** Guaranteed sample-accurate sync, extremely low memory, scales perfectly with time-stretching without distorting the clicks.
-
-### 3.3 AUTOMATIC PLAYBACK CONTROL
-- `LiveMixer` locally tracks the `_maxTrackSamples` among all loaded tracks.
-- When `_currentPosition` exceeds this maximum (if loop is disabled), playback is natively halted (`_isPlaying = false`) and silence is generated.
-- `AudioManager` in Dart polls this condition via `sourceDuration` and syncs the UI `PlayerState` back to `completed`.
-
-## 4. UI / UX ("Dark Studio" Aesthetic)
-### A. Layout Responsivo & Performance
-- **Visual Integration:** Unificación bajo un tema oscuro (`#121212`) simulando hardware (DAW/Consola).
-- **Studio Header:** Barra de estado superior integrada, reemplazando la AppBar nativa.
-- **Loading State:** Unified loading screen that hides the mixer console and transport until all tracks and native engines are fully initialized to avoid UI jumps.
-- **Mixer Screen Vertical Flow:**
-  - `Header`: App controls and status.
-  - `Stems/Console`: Flexible list expanding to fill the variable vertical space. Fixed order to prevent accidental restructuring.
-  - `WaveformSeekBar`: Fixed horizontal zoomable canvas.
-  - `Transport`: Unified bottom bar (Play, Stop, Loop Toggle, Tempo Slider).
-- **Split-UI Pattern:** Separación de componentes estáticos (`TrackListSection`) de dinámicos (`MasterSection`).
-  - `TrackListSection`: Solo se reconstruye ante cambios estructurales (Mute/Solo).
-  - `MasterSection`: Se reconstruye 60fps con el `positionStream` para el medidor y seekbar.
-- **Auto-Fit:** Los canales se ajustan automáticamente al ancho de pantalla disponible.
-- **Pixel-Perfect Alignment:** El Fader del Master alinea exactamente con los Faders de canal.
-- **Console Layout:** Vertical bottom-up component hierarchy (Solo -> Mute -> Pan -> Volume) strictly observed in all strips. Master strip matches this metric spacing with metronome sub-mix controls.
-
-### B. Componentes Avanzados
-- **WaveformSeekBar (Refactored):**
-  - **Visualization:** Draws the Master Mix waveform as a background. Uses dynamic resolution scaling based on audio duration (density-based parsing) to preserve high visual detail when zooming deep into long tracks.
-  - **Semantic LOD:** Ruler dynamically drops beat markers and offsets measure labels when zoomed out.
-  - **State Management & Interaction (`WaveformInteractionController`):** 
-    - Extracted all complex multi-touch, pinch-to-zoom, pan, drag, and snapping math into a dedicated `ChangeNotifier` to maintain gesture memory across UI rebuilds `< 200 lines`.
-    - **Multi-Touch:** Pinch-to-zoom (1x-50x) and two-finger pan/scroll. Implements precise hardware pointer tracking via `Listener` to explicitly separate multi-touch navigation sessions from single-touch actions.
-    - **Tap:** Instant precision seek.
-    - **Loop Handles:** Handled natively by dragging the yellow bounds on the separated `LoopRuler` UI. Adaptive snap to beat/measure based on zoom.
-- **Long-Throw Faders:** Control preciso de volumen con escala dB.
-- **Panning:** Distribución estéreo L/R real.
-
-### C. Responsive & Adaptive Layout (Mobile Optimization)
-- **Conditional Waveform Display:**
-  - **Desktop/Tablet (> 600px):** Shows full vertical waveform and comfortable fader width.
-  - **Mobile (< 600px):** Hides waveforms to prioritize fader control access.
-  - **User Preference:** Can be toggled manually via Settings.
-- **Adaptive Strip Widths:**
-  - Calculates exact width per strip to fit **all active tracks + master** within the screen width.
-  - Ensures a minimum of 6 faders (5 Tracks + 1 Master) are visible without scrolling on standard mobile devices.
-  - Accounts for specific margins (Track: 4px, Master: 8px) to prevent horizontal overflow.
-- **Adaptive Landscape Mode (Smart Layout):**
-  - **Detection:** Active when screen height < 500px (e.g., Landscape Phone).
-  - **Transformation:** Automatically replaces vertical Volume Faders with compact **Volume Knobs**.
-  - **Goal:** Preserves usability in short vertical spaces without requiring scrolling.
-- **Dynamic Typography:**
-  - Track titles automatically adjust font size (10px -> 8px) and letter spacing based on available strip width (< 50px).
-  - Uses `TextOverflow.ellipsis` for graceful truncation on extremely narrow screens.
-
-### D. Settings & Preferences
-- **SettingsService:** `SettingsService` persists user choices via `SharedPreferences`.
-- **Global Features:**
-  - **Show Waveforms:** Toggles track visualization for performance/preference.
-  - **Lock Portrait:** Enforces portrait orientation on supported devices (Mobile/Tablet).
-  - **Audio Engine Mode:** Toggles between Realtime and Offline rendering.
-- **Exercise-Specific Preferences:**
-  - Playback configurations (Global Speed, Loop Range, Track Volumes, Panning, Mutes, Solos, and Master Volume) are now automatically saved and synced per `Exercise.id`.
-  - When opening an exercise, the previous state is completely restored.
-  - A "Reset All" option restores the specific exercise back to factory defaults.
-
-## 6. PERFORMANCE & OPTIMIZATION
-- **Parallel Audio Analysis (Isolates):**
-  - Decoding WAV files and calculating waveform peaks is offloaded to a background isolate using `compute`.
-  - Prevents UI freeze during heavy track loading.
-  - Data transfer optimized using `Map<String, dynamic>` to avoid custom object serialization overhead.
-- **Granular UI Updates:**
-  - `TrackModel` extends `ChangeNotifier` to notify listeners only when its specific properties (volume, pan, mute) change.
-  - `MixerProvider` manages the list structure but delegates property updates to the tracks themselves, preventing global list rebuilds.
-- **Granular Waveform Caching:**
-  - The Master Waveform used in `WaveformSeekBar` is cached in `MixerProvider` and only recalculated when Track volume/mute/pan changes committed.
-
-## 7. KNOWN ISSUES & LIMITATIONS
-- **Specific Audio Glitch (00:08 - 00:10):** [RESOLVED]
-  - **Solution:** The artificial "Smart Pacing" logic (`Future.delayed`) was fighting `just_audio`'s internal buffer logic. Removing the pacing and letting the player pull data naturally eliminated the glitch.
-- **Audio Glitch on Pause/Seek:** [RESOLVED]
-  - **Issue:** Audio continued to play or restarted abruptly when pausing, stopping, or seeking. Mute and Solo toggles caused "chasquidos" (hardware pops).
-  - **Cause:** Miniaudio hardware buffer retained processed frames after device stop, and SoundTouch retained temporal data across seeks. Instant volume changes caused wave-phase discontinuity clipping.
-  - **Mitigation:** Implemented an internal `_isPlaying` flag in `LiveMixer.cpp` to output explicit silence when paused. Added a 20ms smooth fade envelope (`_masterEnvelope`, `_masterStemEnv`, `track->envelope`) to Play/Pause, Seek, Mutes, and Solos to eliminate all zero-crossing pops. `_mixBuffer` is also explicitly cleared on seek.
-- **Play Head Synchronization:** [RESOLVED]
-  - **Issue:** The visual cursor skipped, lagged, or drifted when seeking or pausing.
-  - **Cause:** `MixerStreamSource` was buffering asynchronously. When paused, the stream stopped updating natively but the UI relied on stale `just_audio` events.
-  - **Mitigation:** Changed `AudioManager.seek()` to target the Native Engine directly. Added a high-frequency `Ticker` to `WaveformSeekBar` that polls the exact atomic hardware position (`MixerProvider.currentPosition`). Visual state now snaps instantly and tracks perfectly.
-- **Phase Vocoder CPU Stalling (Crackling):** [RESOLVED]
-  - **Issue:** Severe audio dropouts, silence, and "chisporroteos" when time-stretching is active on mobile.
-  - **Cause:** The custom Transient-Preserving Phase Vocoder, or unoptimized C++ builds, caused CPU starvation.
-  - **Mitigation:** Reverted to `SoundTouch` and forced maximum compiler optimization (`-O3` and `-ffast-math`) in Android's `CMakeLists.txt`, resolving the starvation issue entirely.
-- **Loop Latency:** Dramatically improved with Native Mixing, though minor artifacts may persist at very tight loop boundaries depending on OS scheduling.
-- **Portrait Lock Failure (Android Tablet):** The `SystemChrome.setPreferredOrientations` call is currently ineffective on the test device (TB520FU).
-- **Landscape UI on Mobile:** While functional via "Adaptive Landscape Mode" (Knobs), the UI density is high.
-- **Seek Bar Interaction:** Handle dragging requires precision. "Hold to drag" improves this but can still be refined.
-
-
-## 8. FUTURE ROADMAP / PENDING TASKS
-- **Loop Logic Review:** [DONE] Verify edge cases in C++ looping and ensure UI sync is perfect. (Implemented Sync Map).
-- **Seek Latency:** Improve seek responsiveness. currently `MixerStreamSource` buffering might cause slight delay.
-- **Audio Stability:** Investigate intermittent artifacts (clicks/pops) reported during testing. robustecer estabilidad.
-- **High-Quality Time Stretching Rewrite:** [ON HOLD]
-  - **Status:** We have successfully integrated and optimized SoundTouch. The immediate goal is tuning it via the new UI. 
-  - **Future:** If SoundTouch artifacts cannot be tuned away, we will evaluate:
-    - Integrating `RubberBand Library` (If GPL licensing permits for the project).
-    - Purchasing a commercial license for `élastique` or `Superpowered`.
-- **Export:** Renderizado offline de la mezcla final a archivo de audio.
+## 5. REFACTORING GOALS & ROADMAP
+- **C++ Engine Refactor:** `packages/native_audio_engine/src/live_mixer.cpp` is a powerful but monolithic file (~800 lines). Future steps involve separating this into smaller classes (`TrackManager`, `MetronomeGenerator`, `StretcherContext`).
+- **Dart Refactor:** `AudioManager.dart` (~485 lines) and `MixerStreamSource.dart` (>300 lines) combine stream logic with heavy playback and metronome configuration. These need logical division to follow the strict project standards.
+- **Platform Focus:** Continued optimization testing on Android for low-latency touch interactions and responsiveness down to ~40ms.

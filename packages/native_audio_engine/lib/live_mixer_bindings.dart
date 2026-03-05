@@ -10,8 +10,8 @@ typedef LiveMixerCreateDart = Pointer<Void> Function();
 typedef LiveMixerDestroyC = Void Function(Pointer<Void>);
 typedef LiveMixerDestroyDart = void Function(Pointer<Void>);
 
-typedef LiveMixerAddTrackC = Void Function(Pointer<Void>, Pointer<Utf8>, Pointer<Float>, Int32, Int32);
-typedef LiveMixerAddTrackDart = void Function(Pointer<Void>, Pointer<Utf8>, Pointer<Float>, int, int);
+typedef LiveMixerAddTrackC = Pointer<WaveformData> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>);
+typedef LiveMixerAddTrackDart = Pointer<WaveformData> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>);
 
 typedef LiveMixerRemoveTrackC = Void Function(Pointer<Void>, Pointer<Utf8>);
 typedef LiveMixerRemoveTrackDart = void Function(Pointer<Void>, Pointer<Utf8>);
@@ -56,20 +56,33 @@ typedef LiveMixerSetMetronomeConfigDart = void Function(Pointer<Void>, int);
 typedef LiveMixerSetMetronomeSoundC = Void Function(Pointer<Void>, Int32, Pointer<Float>, Int32);
 typedef LiveMixerSetMetronomeSoundDart = void Function(Pointer<Void>, int, Pointer<Float>, int);
 
-typedef LiveMixerSetMetronomeVolumeC = Void Function(Pointer<Void>, Float, Float);
-typedef LiveMixerSetMetronomeVolumeDart = void Function(Pointer<Void>, double, double);
+typedef LiveMixerAddMetronomePatternC = Void Function(Pointer<Void>, Int32, Pointer<Int32>, Pointer<Int32>, Int32, Float, Bool, Bool);
+typedef LiveMixerAddMetronomePatternDart = void Function(Pointer<Void>, int, Pointer<Int32>, Pointer<Int32>, int, double, bool, bool);
 
-typedef LiveMixerSetMetronomeMuteC = Void Function(Pointer<Void>, Bool, Bool);
-typedef LiveMixerSetMetronomeMuteDart = void Function(Pointer<Void>, bool, bool);
+typedef LiveMixerUpdateMetronomePatternC = Void Function(Pointer<Void>, Int32, Pointer<Int32>, Pointer<Int32>, Int32, Float, Bool, Bool);
+typedef LiveMixerUpdateMetronomePatternDart = void Function(Pointer<Void>, int, Pointer<Int32>, Pointer<Int32>, int, double, bool, bool);
 
-typedef LiveMixerSetMetronomeSoloC = Void Function(Pointer<Void>, Bool, Bool);
-typedef LiveMixerSetMetronomeSoloDart = void Function(Pointer<Void>, bool, bool);
+typedef LiveMixerRemoveMetronomePatternC = Void Function(Pointer<Void>, Int32);
+typedef LiveMixerRemoveMetronomePatternDart = void Function(Pointer<Void>, int);
 
-typedef LiveMixerSetMetronomePatternC = Void Function(Pointer<Void>, Pointer<Int32>, Pointer<Int32>);
-typedef LiveMixerSetMetronomePatternDart = void Function(Pointer<Void>, Pointer<Int32>, Pointer<Int32>);
+typedef LiveMixerClearMetronomePatternsC = Void Function(Pointer<Void>);
+typedef LiveMixerClearMetronomePatternsDart = void Function(Pointer<Void>);
 
 typedef LiveMixerSetMetronomePreviewModeC = Void Function(Pointer<Void>, Bool);
 typedef LiveMixerSetMetronomePreviewModeDart = void Function(Pointer<Void>, bool);
+
+// --- ZERO-COPY DEFS ---
+final class WaveformData extends Struct {
+  external Pointer<Float> peakData;
+  @Int32() external int peakDataLength;
+  @Int32() external int channels;
+  @Int32() external int sampleRate;
+  @Uint64() external int totalFrames;
+  @Int32() external int error;
+}
+
+typedef LiveMixerFreeWaveformDataC = Void Function(Pointer<WaveformData>);
+typedef LiveMixerFreeWaveformDataDart = void Function(Pointer<WaveformData>);
 
 class LiveMixerBindings {
   late DynamicLibrary _lib;
@@ -126,53 +139,23 @@ class LiveMixerBindings {
       _process = _lib.lookupFunction<LiveMixerProcessC, LiveMixerProcessDart>('live_mixer_process');
   }
 
+  void freeWaveformData(Pointer<WaveformData> dataPtr) {
+      final func = _lib.lookupFunction<LiveMixerFreeWaveformDataC, LiveMixerFreeWaveformDataDart>('live_mixer_free_waveform_data');
+      func(dataPtr);
+  }
+
   Pointer<Void> create() => _create();
   void destroy(Pointer<Void> handle) => _destroy(handle);
   
-  void addTrack(Pointer<Void> mixer, String id, List<double> data, int channels) {
+  Pointer<WaveformData> addTrack(Pointer<Void> mixer, String id, String filePath) {
       final idPtr = id.toNativeUtf8();
+      final pathPtr = filePath.toNativeUtf8();
       
-      final dataPtr = calloc<Float>(data.length);
-      for (int i=0; i<data.length; i++) {
-          dataPtr[i] = data[i];
-      }
+      final result = _addTrack(mixer, idPtr, pathPtr);
       
-      _addTrack(mixer, idPtr, dataPtr, data.length, channels);
-      
-      calloc.free(dataPtr);
+      calloc.free(pathPtr);
       calloc.free(idPtr);
-  }
-
-  // --- OPTIMIZED FLOAT32 PATH ---
-  void addTrackFloat32(Pointer<Void> mixer, String id, Float32List data, int channels) {
-      final idPtr = id.toNativeUtf8();
-      
-      // Get pointer directly from Float32List?
-      // No, Dart TypedData is not directly a pointer in FFI without `ffi` package helpers or careful casting.
-      // Easiest is using `calloc` again? NO, that defeats the purpose.
-      // We want to scope the pointer. 
-      // ACTUALLY: FFI's `Allocator` or `Arena` is good, but here we just need to pass the pointer.
-      // If we use `calloc`, we copy.
-      // If the C++ side copies immediately (which it does: `vector::assign`), we just need a temporary pointer.
-      
-      // Best way in Dart FFI to get Pointer<Float> from Float32List WITHOUT copying?
-      // Use `calloc` and `asTypedList`? No.
-      // Use `malloc` from `ffi`?
-      
-      // WAIT. If we want AVOID copy, we need `data.address`? Dart GC might move it.
-      // Safe way: Allocate natively once, and assume C++ copies it.
-      
-      // Optimization: We still need to copy from Dart Heap (Float32List) to Native Heap (Pointer<Float>).
-      // BUT `Float32List` to `Pointer<Float>` copy is faster than `List<double>` to `Pointer<Float>` loop.
-      
-      final ptr = calloc<Float>(data.length);
-      final list = ptr.asTypedList(data.length); 
-      list.setAll(0, data); // Fast memcpy
-      
-      _addTrack(mixer, idPtr, ptr, data.length, channels);
-      
-      calloc.free(ptr);
-      calloc.free(idPtr);
+      return result;
   }
   
   void removeTrack(Pointer<Void> mixer, String id) {
@@ -244,10 +227,10 @@ class LiveMixerBindings {
   // Method caches for metronome
   late final _setMetronomeConfig = _lib.lookupFunction<LiveMixerSetMetronomeConfigC, LiveMixerSetMetronomeConfigDart>('live_mixer_set_metronome_config');
   late final _setMetronomeSound = _lib.lookupFunction<LiveMixerSetMetronomeSoundC, LiveMixerSetMetronomeSoundDart>('live_mixer_set_metronome_sound');
-  late final _setMetronomeVolume = _lib.lookupFunction<LiveMixerSetMetronomeVolumeC, LiveMixerSetMetronomeVolumeDart>('live_mixer_set_metronome_volume');
-  late final _setMetronomeMute = _lib.lookupFunction<LiveMixerSetMetronomeMuteC, LiveMixerSetMetronomeMuteDart>('live_mixer_set_metronome_mute');
-  late final _setMetronomeSolo = _lib.lookupFunction<LiveMixerSetMetronomeSoloC, LiveMixerSetMetronomeSoloDart>('live_mixer_set_metronome_solo');
-  late final _setMetronomePattern = _lib.lookupFunction<LiveMixerSetMetronomePatternC, LiveMixerSetMetronomePatternDart>('live_mixer_set_metronome_pattern');
+  late final _addMetronomePattern = _lib.lookupFunction<LiveMixerAddMetronomePatternC, LiveMixerAddMetronomePatternDart>('live_mixer_add_metronome_pattern');
+  late final _updateMetronomePattern = _lib.lookupFunction<LiveMixerUpdateMetronomePatternC, LiveMixerUpdateMetronomePatternDart>('live_mixer_update_metronome_pattern');
+  late final _removeMetronomePattern = _lib.lookupFunction<LiveMixerRemoveMetronomePatternC, LiveMixerRemoveMetronomePatternDart>('live_mixer_remove_metronome_pattern');
+  late final _clearMetronomePatterns = _lib.lookupFunction<LiveMixerClearMetronomePatternsC, LiveMixerClearMetronomePatternsDart>('live_mixer_clear_metronome_patterns');
   late final _setMetronomePreviewMode = _lib.lookupFunction<LiveMixerSetMetronomePreviewModeC, LiveMixerSetMetronomePreviewModeDart>('live_mixer_set_metronome_preview_mode');
 
   void start(Pointer<Void> mixer) => _start(mixer);
@@ -267,32 +250,48 @@ class LiveMixerBindings {
       calloc.free(ptr);
   }
 
-  void setMetronomeVolume(Pointer<Void> mixer, double vol34, double vol68) => _setMetronomeVolume(mixer, vol34, vol68);
-  
-  void setMetronomeMute(Pointer<Void> mixer, bool mute34, bool mute68) => _setMetronomeMute(mixer, mute34, mute68);
-  
-  void setMetronomeSolo(Pointer<Void> mixer, bool solo34, bool solo68) => _setMetronomeSolo(mixer, solo34, solo68);
-
-  void setMetronomePattern(Pointer<Void> mixer, List<int>? pattern34, List<int>? pattern68) {
-      Pointer<Int32> p34 = nullptr;
-      Pointer<Int32> p68 = nullptr;
-
-      if (pattern34 != null && pattern34.length == 6) {
-          p34 = calloc<Int32>(6);
-          final list = p34.asTypedList(6);
-          list.setAll(0, pattern34);
+  void addMetronomePattern(Pointer<Void> mixer, int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+      Pointer<Int32> flatPtr = nullptr;
+      if (flatPattern != null && flatPattern.isNotEmpty) {
+          flatPtr = calloc<Int32>(flatPattern.length);
+          flatPtr.asTypedList(flatPattern.length).setAll(0, flatPattern);
       }
-      if (pattern68 != null && pattern68.length == 6) {
-          p68 = calloc<Int32>(6);
-          final list = p68.asTypedList(6);
-          list.setAll(0, pattern68);
+      Pointer<Int32> subPtr = nullptr;
+      int numPulses = 0;
+      if (subdivisions != null && subdivisions.isNotEmpty) {
+          numPulses = subdivisions.length;
+          subPtr = calloc<Int32>(numPulses);
+          subPtr.asTypedList(numPulses).setAll(0, subdivisions);
       }
-
-      _setMetronomePattern(mixer, p34, p68);
-
-      if (p34 != nullptr) calloc.free(p34);
-      if (p68 != nullptr) calloc.free(p68);
+      
+      _addMetronomePattern(mixer, id, flatPtr, subPtr, numPulses, vol, mute, solo);
+      
+      if (flatPtr != nullptr) calloc.free(flatPtr);
+      if (subPtr != nullptr) calloc.free(subPtr);
   }
+
+  void updateMetronomePattern(Pointer<Void> mixer, int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+      Pointer<Int32> flatPtr = nullptr;
+      if (flatPattern != null && flatPattern.isNotEmpty) {
+          flatPtr = calloc<Int32>(flatPattern.length);
+          flatPtr.asTypedList(flatPattern.length).setAll(0, flatPattern);
+      }
+      Pointer<Int32> subPtr = nullptr;
+      int numPulses = 0;
+      if (subdivisions != null && subdivisions.isNotEmpty) {
+          numPulses = subdivisions.length;
+          subPtr = calloc<Int32>(numPulses);
+          subPtr.asTypedList(numPulses).setAll(0, subdivisions);
+      }
+      
+      _updateMetronomePattern(mixer, id, flatPtr, subPtr, numPulses, vol, mute, solo);
+      
+      if (flatPtr != nullptr) calloc.free(flatPtr);
+      if (subPtr != nullptr) calloc.free(subPtr);
+  }
+
+  void removeMetronomePattern(Pointer<Void> mixer, int id) => _removeMetronomePattern(mixer, id);
+  void clearMetronomePatterns(Pointer<Void> mixer) => _clearMetronomePatterns(mixer);
   
   void setMetronomePreviewMode(Pointer<Void> mixer, bool enabled) => _setMetronomePreviewMode(mixer, enabled);
 }

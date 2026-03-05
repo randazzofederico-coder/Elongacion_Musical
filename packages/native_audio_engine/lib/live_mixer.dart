@@ -19,21 +19,13 @@ class LiveMixer {
     }
   }
 
-  void addTrack(String id, List<double> data, int channels) {
-    if (_isDisposed) return;
-    
-    // We need to pass data as float array.
-    // The bindings handle the conversion and copying.
-    // However, if the track is huge, passing List<double> might verify memory pressure.
-    // But for now, simple implementation via bindings.
-    
-    // Optimization: If bindings take List<double> they iterate and copy. That's fine.
-    _bindings.addTrack(_handle, id, data, channels);
+  Pointer<WaveformData>? addTrack(String id, String filePath) {
+    if (_isDisposed) return null;
+    return _bindings.addTrack(_handle, id, filePath);
   }
 
-  void addTrackFloat32(String id, Float32List data, int channels) {
-    if (_isDisposed) return;
-    _bindings.addTrackFloat32(_handle, id, data, channels);
+  void freeWaveformData(Pointer<WaveformData> dataPtr) {
+    _bindings.freeWaveformData(dataPtr);
   }
 
   void removeTrack(String id) {
@@ -150,24 +142,24 @@ class LiveMixer {
      _bindings.setMetronomeSound(_handle, type, data);
   }
 
-  void setMetronomeVolume(double vol34, double vol68) {
-     if (_isDisposed) return;
-     _bindings.setMetronomeVolume(_handle, vol34, vol68);
-  }
-
-  void setMetronomeMute(bool mute34, bool mute68) {
-     if (_isDisposed) return;
-     _bindings.setMetronomeMute(_handle, mute34, mute68);
-  }
-
-  void setMetronomeSolo(bool solo34, bool solo68) {
-     if (_isDisposed) return;
-     _bindings.setMetronomeSolo(_handle, solo34, solo68);
-  }
-
-  void setMetronomePattern(List<int>? pattern34, List<int>? pattern68) {
+  void addMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
       if (_isDisposed) return;
-      _bindings.setMetronomePattern(_handle, pattern34, pattern68);
+      _bindings.addMetronomePattern(_handle, id, flatPattern, subdivisions, vol, mute, solo);
+  }
+
+  void updateMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+      if (_isDisposed) return;
+      _bindings.updateMetronomePattern(_handle, id, flatPattern, subdivisions, vol, mute, solo);
+  }
+
+  void removeMetronomePattern(int id) {
+      if (_isDisposed) return;
+      _bindings.removeMetronomePattern(_handle, id);
+  }
+
+  void clearMetronomePatterns() {
+      if (_isDisposed) return;
+      _bindings.clearMetronomePatterns(_handle);
   }
 
   void setMetronomePreviewMode(bool enabled) {

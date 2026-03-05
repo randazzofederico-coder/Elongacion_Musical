@@ -11,7 +11,7 @@ import 'package:elongacion_musical/models/track_model.dart';
 // import 'package:elongacion_musical/services/audio_processor.dart'; // Removed
 import 'package:native_audio_engine/live_mixer.dart';
 import 'package:elongacion_musical/utils/wav_header_utils.dart';
-import 'package:elongacion_musical/utils/mixer_utils.dart';
+
 
 /// A custom [StreamAudioSource] that mixes multiple audio tracks in real-time.
 ///
@@ -34,27 +34,26 @@ class MixerStreamSource extends StreamAudioSource {
   
   double _currentTempo = 1.0;
   
-  // Native Mixer
-  final LiveMixer _liveMixer = LiveMixer();
+  // Native Mixer (Passed from AudioManager)
+  final LiveMixer _liveMixer;
   
   // Control update flags
   bool _needsTrackUpdate = false; 
   
-  // Persistent Audio Processor
-  // Removed AudioProcessor - Native side handles it now directly in liveMixer.process
-  // late final AudioProcessor _processor;
-
-  MixerStreamSource(this.tracks, this.totalSamples, this.sampleRate, {
+  MixerStreamSource(this._liveMixer, this.tracks, this.totalSamples, this.sampleRate, {
     required this.getMasterVolume,
     required this.getPosition,
     required this.isBuffering,
-    this.latencyHint = const Duration(milliseconds: 200), // Default safe value
+    this.latencyHint = const Duration(milliseconds: 200),
   }) {
-      initializeMixerTracks(_liveMixer, tracks);
-      
-      // Initialize Native Controls
+      // _liveMixer is already loaded with tracks by AudioManager.
+      // We just ensure global settings are linked.
       _liveMixer.setSpeed(_currentTempo);
       _liveMixer.setMasterVolume(getMasterVolume());
+      
+      // Initialize the default 3/4 and 6/8 patterns in the native engine
+      _liveMixer.addMetronomePattern(1, null, null, 0.0, false, false);
+      _liveMixer.addMetronomePattern(2, null, null, 0.0, false, false);
   }
   
   void setTempo(double tempo) {
@@ -99,12 +98,50 @@ class MixerStreamSource extends StreamAudioSource {
   void setSolo(String id, bool solo) => _liveMixer.setSolo(id, solo);
 
   // -- Metronome Controls --
+  // Backward compatibility state trackers for the Exercise Mixer
+  List<int>? _pattern34;
+  List<int>? _pattern68;
+  double _vol34 = 0.0;
+  double _vol68 = 0.0;
+  bool _mute34 = false;
+  bool _mute68 = false;
+  bool _solo34 = false;
+  bool _solo68 = false;
+
+  void _pushMetronome34() => _liveMixer.updateMetronomePattern(1, _pattern34, const [2, 2, 2], _vol34, _mute34, _solo34);
+  void _pushMetronome68() => _liveMixer.updateMetronomePattern(2, _pattern68, const [2, 2, 2], _vol68, _mute68, _solo68);
+
   void setMetronomeConfig(int bpm) => _liveMixer.setMetronomeConfig(bpm);
   void setMetronomeSound(int type, Float32List data) => _liveMixer.setMetronomeSound(type, data);
-  void setMetronomeVolume(double vol34, double vol68) => _liveMixer.setMetronomeVolume(vol34, vol68);
-  void setMetronomeMute(bool mute34, bool mute68) => _liveMixer.setMetronomeMute(mute34, mute68);
-  void setMetronomeSolo(bool solo34, bool solo68) => _liveMixer.setMetronomeSolo(solo34, solo68);
-  void setMetronomePattern(List<int>? pattern34, List<int>? pattern68) => _liveMixer.setMetronomePattern(pattern34, pattern68);
+  
+  void setMetronomeVolume(double vol34, double vol68) {
+      _vol34 = vol34;
+      _vol68 = vol68;
+      _pushMetronome34();
+      _pushMetronome68();
+  }
+  
+  void setMetronomeMute(bool mute34, bool mute68) {
+      _mute34 = mute34;
+      _mute68 = mute68;
+      _pushMetronome34();
+      _pushMetronome68();
+  }
+  
+  void setMetronomeSolo(bool solo34, bool solo68) {
+      _solo34 = solo34;
+      _solo68 = solo68;
+      _pushMetronome34();
+      _pushMetronome68();
+  }
+  
+  void setMetronomePattern(List<int>? pattern34, List<int>? pattern68) {
+      _pattern34 = pattern34;
+      _pattern68 = pattern68;
+      _pushMetronome34();
+      _pushMetronome68();
+  }
+  
   void setMetronomePreviewMode(bool enabled) => _liveMixer.setMetronomePreviewMode(enabled);
   
   // Loop Control

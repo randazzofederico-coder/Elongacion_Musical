@@ -1,0 +1,908 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:elongacion_musical/constants/app_colors.dart';
+import 'package:elongacion_musical/providers/metronome_provider.dart';
+import 'package:elongacion_musical/providers/mixer_provider.dart';
+import 'package:elongacion_musical/widgets/knob_control.dart';
+import 'package:flutter/scheduler.dart';
+
+class MetronomeScreen extends StatefulWidget {
+  const MetronomeScreen({super.key});
+
+  @override
+  State<MetronomeScreen> createState() => _MetronomeScreenState();
+}
+
+class _MetronomeScreenState extends State<MetronomeScreen> {
+  // Focus management for custom keyboard
+  int? _activePatternIdForKeyboard;
+  final Map<int, TextEditingController> _structureControllers = {};
+  
+  // Map Slider Value [0.0, 1.0] to BPM [1, 999]
+  int _sliderToBpm(double val) {
+    if (val <= 0.15) {
+      return (1 + 29 * (val / 0.15)).round(); // 0.0 -> 1, 0.15 -> 30
+    } else if (val <= 0.85) {
+      return (30 + 220 * ((val - 0.15) / 0.70)).round(); // 0.15 -> 30, 0.85 -> 250
+    } else {
+      return (250 + 749 * ((val - 0.85) / 0.15)).round(); // 0.85 -> 250, 1.0 -> 999
+    }
+  }
+
+  // Map BPM [1, 999] to Slider Value [0.0, 1.0]
+  double _bpmToSlider(int bpm) {
+    if (bpm <= 30) {
+      return 0.15 * ((bpm - 1) / 29.0);
+    } else if (bpm <= 250) {
+      return 0.15 + 0.70 * ((bpm - 30) / 220.0);
+    } else {
+      return 0.85 + 0.15 * ((bpm - 250) / 749.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _structureControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background(context),
+      appBar: AppBar(
+        title: const Text('METRÓNOMO', style: TextStyle(letterSpacing: 2.0)),
+        backgroundColor: AppColors.surface(context),
+        centerTitle: true,
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: GestureDetector(
+          onTap: () {
+            // Dismiss custom keyboard when tapping outside
+            if (_activePatternIdForKeyboard != null) {
+              setState(() {
+                _activePatternIdForKeyboard = null;
+              });
+            }
+          },
+          child: Consumer<MetronomeProvider>(
+            builder: (context, metronome, child) {
+              return Stack(
+                children: [
+                  ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                    children: [
+                      _buildGlobalControls(context, metronome),
+                const SizedBox(height: 16),
+                _MacroCycleVisualizer(metronome: metronome),
+                const SizedBox(height: 8),
+                
+                // Dynamic Instances
+                ...metronome.instances.map((instance) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: _buildMetronomeInstance(
+                      context: context,
+                      instance: instance,
+                      onStructureChange: (newStructure) => metronome.updateInstanceStructure(instance.id, newStructure),
+                      onPulseSubdivisionChange: (pulseIndex, subIndex, newType) {
+                          final newPulses = List<HomeMetronomePulse>.from(instance.pulses);
+                          newPulses[pulseIndex].subdivisions[subIndex] = newType;
+                          metronome.updateInstancePulses(instance.id, newPulses);
+                      },
+                      onVolChanged: (val) => metronome.updateInstanceVolume(instance.id, val),
+                      onMuteToggle: () => metronome.toggleInstanceMute(instance.id),
+                      onSoloToggle: () => metronome.toggleInstanceSolo(instance.id),
+                      onRemove: () => metronome.removeInstance(instance.id),
+                    ),
+                  );
+                }).toList(),
+                
+                      // Add Pattern Button
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          metronome.addInstance(title: "Patrón ${metronome.instances.length + 1}");
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text("AÑADIR PATRÓN"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.surfaceHighlight(context),
+                          foregroundColor: AppColors.textPrimary(context),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(color: AppColors.border(context)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 250), // Pad bottom for keyboard
+                    ],
+                  ),
+                  
+                  // Custom Keyboard Overlay
+                  if (_activePatternIdForKeyboard != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: _buildCustomKeyboard(
+                         context: context,
+                         instanceId: _activePatternIdForKeyboard!,
+                         controller: _structureControllers[_activePatternIdForKeyboard!]!,
+                         onSubmit: (val) {
+                             metronome.updateInstanceStructure(_activePatternIdForKeyboard!, val);
+                             setState(() {
+                                 _activePatternIdForKeyboard = null;
+                             });
+                         },
+                         onUpdateLive: (val) {
+                             // Force local UI redraw so the user sees the '+' immediately
+                             setState(() {});
+                             
+                             if (val.isNotEmpty && !val.endsWith('+')) { 
+                                 metronome.updateInstanceStructure(_activePatternIdForKeyboard!, val);
+                             }
+                         }
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlobalControls(BuildContext context, MetronomeProvider metronome) {
+    final bool isPlaying = metronome.isPlaying;
+    final currentBpm = metronome.bpm;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ]
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Play/Stop Button
+          GestureDetector(
+            onTap: () => metronome.togglePlay(),
+            child: Container(
+              height: 64,
+              width: 64,
+              decoration: BoxDecoration(
+                color: isPlaying ? AppColors.accentRed(context) : AppColors.accentCyan(context),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: (isPlaying ? AppColors.accentRed(context) : AppColors.accentCyan(context)).withOpacity(0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(
+                isPlaying ? Icons.stop : Icons.play_arrow,
+                color: Colors.white,
+                size: 36,
+              ),
+            ),
+          ),
+          
+          // BPM Display and Adjust
+          Expanded(
+            child: Column(
+              children: [
+                 Text(
+                  "TEMPO",
+                  style: TextStyle(
+                    color: AppColors.textSecondary(context),
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                       IconButton(
+                         icon: Icon(Icons.keyboard_double_arrow_left, color: AppColors.textSecondary(context)),
+                         onPressed: () => metronome.updateBPM(currentBpm - 5),
+                       ),
+                       IconButton(
+                         icon: Icon(Icons.remove_circle_outline, color: AppColors.textSecondary(context)),
+                         onPressed: () => metronome.updateBPM(currentBpm - 1),
+                       ),
+                       Container(
+                         width: 80,
+                         alignment: Alignment.center,
+                         child: Text(
+                           "$currentBpm",
+                           style: TextStyle(
+                             color: AppColors.textPrimary(context),
+                             fontSize: 36,
+                             fontWeight: FontWeight.bold,
+                           ),
+                         ),
+                       ),
+                       IconButton(
+                         icon: Icon(Icons.add_circle_outline, color: AppColors.textSecondary(context)),
+                         onPressed: () => metronome.updateBPM(currentBpm + 1),
+                       ),
+                       IconButton(
+                         icon: Icon(Icons.keyboard_double_arrow_right, color: AppColors.textSecondary(context)),
+                         onPressed: () => metronome.updateBPM(currentBpm + 5),
+                       ),
+                    ],
+                  ),
+                ),
+                // Tempo Slider
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 4,
+                    activeTrackColor: AppColors.accentCyan(context),
+                    inactiveTrackColor: AppColors.border(context),
+                    thumbColor: AppColors.accentCyan(context),
+                    overlayColor: AppColors.accentCyan(context).withOpacity(0.2),
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                  ),
+                  child: Slider(
+                    value: _bpmToSlider(currentBpm).clamp(0.0, 1.0),
+                    min: 0.0,
+                    max: 1.0,
+                    onChanged: (val) => metronome.updateBPM(_sliderToBpm(val)),
+                  ),
+                )
+              ],
+            ),
+          ),
+          
+          // Tap Tempo Button
+          GestureDetector(
+            onTap: () => metronome.tapTempo(),
+            child: Container(
+              height: 64,
+              width: 64,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceHighlight(context),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border(context), width: 2),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                   Icon(Icons.touch_app, color: AppColors.textPrimary(context), size: 24),
+                   const SizedBox(height: 2),
+                   Text(
+                     "TAP",
+                     style: TextStyle(
+                       color: AppColors.textPrimary(context),
+                       fontWeight: FontWeight.bold,
+                       fontSize: 10,
+                       letterSpacing: 1.0,
+                     ),
+                   )
+                ],
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsTrackStrip({
+      required BuildContext context,
+      required String label,
+      required double value,
+      required Function(double) onChanged,
+      required bool isMuted,
+      required VoidCallback onMuteToggle,
+      required bool isSolo,
+      required VoidCallback onSoloToggle,
+      required bool isActive,
+      bool hideSolo = false,
+  }) {
+      return Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+              KnobControl(
+                  value: value,
+                  onChanged: onChanged,
+                  min: 0,
+                  max: 1,
+                  label: label,
+                  labelColor: isActive ? AppColors.accentGreen(context) : AppColors.accentRed(context),
+              ),
+              const SizedBox(width: 16),
+              // Mute Button
+              GestureDetector(
+                  onTap: onMuteToggle,
+                  child: Container(
+                      width: 40,
+                      height: 32,
+                      decoration: BoxDecoration(
+                          color: isMuted ? AppColors.accentRed(context) : Colors.grey.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.border(context)),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                          'M',
+                          style: TextStyle(
+                              color: isMuted ? Colors.white : Colors.grey,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                          ),
+                      ),
+                  ),
+              ),
+              if (!hideSolo) ...[
+                  const SizedBox(width: 8),
+                  // Solo Button
+                  GestureDetector(
+                      onTap: onSoloToggle,
+                      child: Container(
+                          width: 40,
+                          height: 32,
+                          decoration: BoxDecoration(
+                              color: isSolo ? AppColors.accentCyan(context) : Colors.grey.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppColors.border(context)),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                              'S',
+                              style: TextStyle(
+                                  color: isSolo ? Colors.black : Colors.grey,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                              ),
+                          ),
+                      ),
+                  ),
+              ],
+          ],
+      );
+  }
+
+  Widget _buildMetronomeInstance({
+    required BuildContext context,
+    required HomeMetronomeInstance instance,
+    required Function(String) onStructureChange,
+    required Function(int pulseIndex, int subIndex, int type) onPulseSubdivisionChange,
+    required Function(double) onVolChanged,
+    required VoidCallback onMuteToggle,
+    required VoidCallback onSoloToggle,
+    required VoidCallback onRemove,
+  }) {
+    if (!_structureControllers.containsKey(instance.id)) {
+        _structureControllers[instance.id] = TextEditingController(text: instance.structure);
+    } else if (_activePatternIdForKeyboard != instance.id) {
+        // Sync back controller when not editing it
+        _structureControllers[instance.id]!.text = instance.structure;
+    }
+
+    bool isEditing = _activePatternIdForKeyboard == instance.id;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+               Expanded(
+                 flex: 2,
+                 child: Text(instance.title, style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, letterSpacing: 1.5), overflow: TextOverflow.ellipsis),
+               ),
+               // Grouping Text Field (Custom Touch Target)
+               Expanded(
+                 flex: 3,
+                 child: GestureDetector(
+                   onTap: () {
+                       setState(() {
+                           _activePatternIdForKeyboard = instance.id;
+                       });
+                   },
+                   child: Container(
+                     height: 36,
+                     padding: const EdgeInsets.symmetric(horizontal: 12),
+                     decoration: BoxDecoration(
+                         color: AppColors.background(context).withOpacity(0.5),
+                         border: Border.all(color: isEditing ? AppColors.accentCyan(context) : AppColors.border(context).withOpacity(0.5)),
+                         borderRadius: BorderRadius.circular(4),
+                     ),
+                     child: Row(
+                         children: [
+                             Icon(Icons.edit_note, color: isEditing ? AppColors.accentCyan(context) : AppColors.textSecondary(context), size: 18),
+                             const SizedBox(width: 8),
+                             Expanded(
+                                 child: TextField(
+                                     controller: _structureControllers[instance.id],
+                                     readOnly: true,
+                                     showCursor: isEditing,
+                                     cursorColor: AppColors.accentCyan(context),
+                                     onTap: () {
+                                         setState(() {
+                                             _activePatternIdForKeyboard = instance.id;
+                                         });
+                                     },
+                                     style: TextStyle(
+                                         color: isEditing ? AppColors.accentCyan(context) : AppColors.textPrimary(context),
+                                         fontWeight: FontWeight.bold,
+                                         fontSize: 16,
+                                         letterSpacing: 2.0,
+                                     ),
+                                     decoration: InputDecoration(
+                                         border: InputBorder.none,
+                                         isDense: true,
+                                         contentPadding: EdgeInsets.zero,
+                                         hintText: "Ej. 3+2",
+                                         hintStyle: TextStyle(
+                                             color: AppColors.textSecondary(context).withOpacity(0.5),
+                                         )
+                                     ),
+                                 ),
+                             ),
+                         ],
+                     ),
+                   ),
+                 ),
+               ),
+               const SizedBox(width: 8),
+               Container(
+                 width: 36,
+                 height: 36,
+                 decoration: BoxDecoration(
+                   color: AppColors.background(context).withOpacity(0.5),
+                   borderRadius: BorderRadius.circular(4),
+                 ),
+                 child: IconButton(
+                   padding: EdgeInsets.zero,
+                   icon: Icon(Icons.close, color: AppColors.accentRed(context).withOpacity(0.7), size: 18),
+                   onPressed: onRemove,
+                 ),
+               )
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Sequencer Cells (Responsive & Auto-Wrapping)
+          LayoutBuilder(
+            builder: (context, constraints) {
+               int items = instance.pulses.length;
+               int rows = 1;
+               // If cells get too squeezed (e.g. less than 45px width each), we divide them into multiple rows
+               if (items > 0 && constraints.maxWidth / items < 45.0) {
+                 rows = 2; 
+                 // We could scale to 3 rows if items > 16, but 2 handles most standard use cases cleanly
+                 if (items > 16) rows = 3;
+               }
+               int itemsPerRow = (items / rows).ceil();
+               
+               List<Widget> rowWidgets = [];
+               for(int r = 0; r < rows; r++) {
+                   int start = r * itemsPerRow;
+                   int end = start + itemsPerRow;
+                   if (end > items) end = items;
+                   if (start >= items) break;
+                   
+                   List<Widget> cellWidgets = [];
+                   for (int i = start; i < end; i++) {
+                     final pulse = instance.pulses[i];
+                     int subdivCount = pulse.subdivisions.length;
+                     
+                     cellWidgets.add(
+                       Expanded(
+                         child: Container(
+                           margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                           height: rows == 1 ? 55 : 45, // Container total height
+                           decoration: BoxDecoration(
+                             border: Border.all(color: AppColors.border(context), width: 1.5),
+                             borderRadius: BorderRadius.circular(8),
+                           ),
+                           child: ClipRRect(
+                             borderRadius: BorderRadius.circular(6),
+                             child: Row(
+                               crossAxisAlignment: CrossAxisAlignment.end, // Align to bottom so the "step down" happens from the top
+                               children: List.generate(subdivCount, (subIndex) {
+                                 int currentType = pulse.subdivisions[subIndex];
+                                 bool isHead = subIndex == 0;
+                                 
+                                 return Expanded(
+                                   child: GestureDetector(
+                                     onTap: () {
+                                        int newType = (currentType + 1) % 4;
+                                        onPulseSubdivisionChange(i, subIndex, newType);
+                                     },
+                                     child: Container(
+                                       // Create the height difference step for sub-beats
+                                       margin: EdgeInsets.only(top: isHead ? 0 : 8),
+                                       decoration: BoxDecoration(
+                                         color: currentType == 0 ? AppColors.background(context) : _getColorForType(context, currentType).withOpacity(0.2),
+                                         border: Border(
+                                           right: subIndex < subdivCount - 1 
+                                              ? BorderSide(color: AppColors.background(context), width: 3) // Harder, thicker dark line between sub-cells
+                                              : BorderSide.none,
+                                           top: isHead ? BorderSide.none : BorderSide(color: AppColors.border(context).withOpacity(0.5), width: 1), // Top border for chopped down sub-beats
+                                         )
+                                       ),
+                                       alignment: Alignment.center,
+                                       child: Column(
+                                         mainAxisAlignment: MainAxisAlignment.center,
+                                         children: [
+                                           // Only show the big number on the FIRST subdivision head of the pulse
+                                           if (subIndex == 0)
+                                             Text(
+                                               '${i + 1}', 
+                                               style: TextStyle(
+                                                 color: currentType == 0 ? AppColors.textSecondary(context) : AppColors.textPrimary(context),
+                                                 fontWeight: FontWeight.bold,
+                                                 fontSize: rows == 1 ? 16 : 12
+                                               )
+                                             ),
+                                           if (currentType != 0)
+                                             FittedBox(
+                                               fit: BoxFit.scaleDown,
+                                               child: Text(
+                                                  _getLabelForType(currentType),
+                                                  style: TextStyle(
+                                                     color: _getColorForType(context, currentType),
+                                                     fontSize: 8, // Smaller text for subdivided boxes
+                                                     fontWeight: FontWeight.bold,
+                                                     letterSpacing: -0.5,
+                                                  )
+                                               ),
+                                             )
+                                         ],
+                                       ),
+                                     ),
+                                   ),
+                                 );
+                               }),
+                             ),
+                           ),
+                         ),
+                       ),
+                     );
+                   }
+                   // Pad the last row with empty space if needed
+                   while (cellWidgets.length < itemsPerRow) {
+                       cellWidgets.add(Expanded(child: const SizedBox.shrink()));
+                   }
+                   rowWidgets.add(Row(children: cellWidgets));
+               }
+               return Column(children: rowWidgets);
+            }
+          ),
+          const SizedBox(height: 20),
+          // Track Strip (Volume, Mute, Solo) now displayed at the bottom spanning across
+          Center(
+            child: _buildSettingsTrackStrip(
+                context: context,
+                label: 'VOL',
+                value: instance.volume,
+                onChanged: onVolChanged,
+                isMuted: instance.isMuted,
+                onMuteToggle: onMuteToggle,
+                isSolo: instance.isSolo,
+                onSoloToggle: onSoloToggle,
+                isActive: instance.volume > 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getColorForType(BuildContext context, int type) {
+     switch (type) {
+        case 1: return AppColors.accentRed(context);
+        case 2: return AppColors.accentCyan(context);
+        case 3: return AppColors.accentGreen(context);
+        default: return AppColors.surfaceHighlight(context);
+     }
+  }
+  
+  String _getLabelForType(int type) {
+     switch (type) {
+        case 1: return "ALTO";
+        case 2: return "BAJO";
+        case 3: return "MEDIO";
+        default: return "";
+     }
+  }
+
+  // --- CUSTOM KEYBOARD ---
+  Widget _buildCustomKeyboard({
+      required BuildContext context, 
+      required int instanceId,
+      required TextEditingController controller,
+      required Function(String) onSubmit,
+      required Function(String) onUpdateLive,
+  }) {
+      return Container(
+          padding: const EdgeInsets.only(top: 12, bottom: 24, left: 8, right: 8),
+          decoration: BoxDecoration(
+              color: AppColors.surfaceHighlight(context),
+              border: Border(top: BorderSide(color: AppColors.border(context), width: 2)),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, -4))]
+          ),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                  Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                          Padding(
+                              padding: const EdgeInsets.only(left: 12, bottom: 8),
+                              child: Text("ESTRUCTURA MÉTRICA", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10, letterSpacing: 2)),
+                          ),
+                          GestureDetector(
+                               onTap: () => onSubmit(controller.text),
+                               child: Padding(
+                                   padding: const EdgeInsets.only(right: 12, bottom: 8),
+                                   child: Icon(Icons.keyboard_hide, color: AppColors.textSecondary(context), size: 20),
+                               ),
+                          ),
+                      ],
+                  ),
+                  Row(
+                      children: [
+                          Expanded(child: _buildKeyBtn("1", controller, onUpdateLive)),
+                          Expanded(child: _buildKeyBtn("2", controller, onUpdateLive)),
+                          Expanded(child: _buildKeyBtn("3", controller, onUpdateLive)),
+                          Expanded(child: _buildKeyBtn("+", controller, onUpdateLive, isControl: true, color: AppColors.accentGreen(context))),
+                      ],
+                  ),
+                  Row(
+                      children: [
+                          Expanded(child: _buildKeyBtn("4", controller, onUpdateLive)),
+                          Expanded(child: _buildKeyBtn("5", controller, onUpdateLive)),
+                          Expanded(child: _buildKeyBtn("6", controller, onUpdateLive)),
+                          Expanded(child: _buildKeyBtn("/", controller, onUpdateLive, isControl: true, color: AppColors.accentGreen(context))),
+                      ],
+                  ),
+                  Row(
+                      children: [
+                          Expanded(child: _buildKeyBtn("7", controller, onUpdateLive)),
+                          Expanded(child: _buildKeyBtn("8", controller, onUpdateLive)),
+                          Expanded(child: _buildKeyBtn("9", controller, onUpdateLive)),
+                          Expanded(
+                              flex: 1, 
+                              child: _buildKeyBtn("\u232b", controller, onUpdateLive, isControl: true, color: AppColors.accentRed(context), icon: Icons.backspace) // Backspace
+                          ),
+                      ],
+                  ),
+                  Row(
+                      children: [
+                          Expanded(flex: 1, child: _buildKeyBtn("0", controller, onUpdateLive)),
+                          Expanded(flex: 3, child: _buildKeyBtn("OK", controller, (v) => onSubmit(controller.text), isControl: true, color: AppColors.accentCyan(context))),
+                      ],
+                  ),
+              ],
+          ),
+      );
+  }
+
+  Widget _buildKeyBtn(String keyData, TextEditingController controller, Function(String) onChange, {bool isControl = false, Color? color, IconData? icon}) {
+      return GestureDetector(
+          onTap: () {
+              if (keyData == "OK") {
+                  onChange(controller.text);
+              } else if (keyData == "\u232b") {
+                  if (controller.text.isNotEmpty) {
+                      final int pos = controller.selection.baseOffset;
+                      if (pos > 0) {
+                          controller.text = controller.text.substring(0, pos - 1) + controller.text.substring(pos);
+                          controller.selection = TextSelection.collapsed(offset: pos - 1);
+                          onChange(controller.text);
+                      } else if (pos == -1) {
+                          // Cursor not active, delete from end
+                          controller.text = controller.text.substring(0, controller.text.length - 1);
+                          onChange(controller.text);
+                      }
+                  }
+              } else {
+                  final int pos = controller.selection.baseOffset;
+                  if (pos >= 0) {
+                      controller.text = controller.text.substring(0, pos) + keyData + controller.text.substring(pos);
+                      controller.selection = TextSelection.collapsed(offset: pos + keyData.length);
+                  } else {
+                      controller.text += keyData;
+                  }
+                  onChange(controller.text);
+              }
+          },
+          child: Container(
+              margin: const EdgeInsets.all(4),
+              height: 55,
+              decoration: BoxDecoration(
+                  color: isControl ? (color ?? AppColors.surface(context)).withOpacity(0.2) : AppColors.surface(context),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: isControl ? (color ?? AppColors.border(context)) : AppColors.border(context)),
+              ),
+              alignment: Alignment.center,
+              child: icon != null 
+                  ? Icon(icon, color: isControl ? (color ?? AppColors.textPrimary(context)) : AppColors.textPrimary(context), size: 24)
+                  : Text(
+                      keyData,
+                      style: TextStyle(
+                          color: isControl ? (color ?? AppColors.textPrimary(context)) : AppColors.textPrimary(context),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                      ),
+                  ),
+          ),
+      );
+  }
+}
+
+class _MacroCycleVisualizer extends StatefulWidget {
+  final MetronomeProvider metronome;
+
+  const _MacroCycleVisualizer({Key? key, required this.metronome}) : super(key: key);
+
+  @override
+  State<_MacroCycleVisualizer> createState() => _MacroCycleVisualizerState();
+}
+
+class _MacroCycleVisualizerState extends State<_MacroCycleVisualizer> with SingleTickerProviderStateMixin {
+  late Ticker _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker((elapsed) {
+      if (widget.metronome.isPlaying) {
+        setState(() {}); // Repaint at 60fps
+      } else if (widget.metronome.currentMacroProgress == 0.0) {
+        setState(() {}); // Ensure it snaps to 0 on stop
+      }
+    });
+    _ticker.start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  Color _getColorForTypeLocal(BuildContext context, int type) {
+     switch (type) {
+        case 1: return AppColors.accentRed(context);
+        case 2: return AppColors.accentCyan(context);
+        case 3: return AppColors.accentGreen(context);
+        default: return AppColors.surfaceHighlight(context);
+     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.metronome.instances.isEmpty) return const SizedBox.shrink();
+
+    int macroBeats = widget.metronome.macroCycleBeats;
+    double progress = widget.metronome.currentMacroProgress;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+               Text("CICLO MACRO", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10, letterSpacing: 2.0, fontWeight: FontWeight.bold)),
+               Text("$macroBeats Pulsos", style: TextStyle(color: AppColors.accentCyan(context), fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Matrix of cells
+                  Column(
+                    children: widget.metronome.instances.map((instance) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        height: 16,
+                        child: Row(
+                          children: List.generate(macroBeats, (index) {
+                            int originalIndex = index % instance.pulses.length;
+                            final pulse = instance.pulses[originalIndex];
+                            
+                            return Expanded(
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 1),
+                                child: Row(
+                                   crossAxisAlignment: CrossAxisAlignment.end,
+                                   children: List.generate(pulse.subdivisions.length, (subIndex) {
+                                       int type = pulse.subdivisions[subIndex];
+                                       bool isHead = subIndex == 0;
+                                       
+                                       Color color = type == 0 
+                                          ? AppColors.background(context) 
+                                          : _getColorForTypeLocal(context, type);
+                                          
+                                       return Expanded(
+                                          child: Container(
+                                              margin: EdgeInsets.only(top: isHead ? 0 : 3), // step down logic
+                                              decoration: BoxDecoration(
+                                                  color: type == 0 ? color : color.withOpacity(0.4),
+                                                  border: Border(
+                                                      right: subIndex < pulse.subdivisions.length - 1
+                                                          ? BorderSide(color: AppColors.background(context), width: 1.0)
+                                                          : BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1),
+                                                      top: isHead ? BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1) : BorderSide(color: Colors.transparent, width: 1),
+                                                      bottom: BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1),
+                                                      left: isHead ? BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1) : BorderSide(color: Colors.transparent, width: 1),
+                                                  ),
+                                                  // Removed borderRadius because Flutter requires uniform borders to use borderRadius
+                                              ),
+                                          ),
+                                       );
+                                   }),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  
+                  // Playhead
+                  Positioned(
+                    left: constraints.maxWidth * progress,
+                    top: -4,
+                    bottom: 0,
+                    child: Container(
+                      width: 2,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(color: Colors.white.withOpacity(0.5), blurRadius: 4, spreadRadius: 1)
+                        ]
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+          ),
+        ],
+      ),
+    );
+  }
+}

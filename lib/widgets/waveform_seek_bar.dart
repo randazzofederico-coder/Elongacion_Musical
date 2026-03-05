@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:elongacion_musical/providers/mixer_provider.dart';
+import 'package:elongacion_musical/constants/app_colors.dart';
 import 'package:elongacion_musical/widgets/waveform/waveform_painter.dart';
 import 'package:elongacion_musical/widgets/waveform/loop_ruler.dart';
 import 'package:elongacion_musical/widgets/waveform/waveform_interaction_controller.dart';
@@ -102,7 +103,6 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
         }
     }
 
-    // Update controller properties without recreating it to preserve transient gesture states
     _interactionController.duration = widget.duration;
     _interactionController.bpm = widget.bpm;
     _interactionController.timeSignatureNumerator = widget.timeSignatureNumerator;
@@ -110,7 +110,6 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
     _interactionController.initialLoopStart = widget.loopStart;
     _interactionController.initialLoopEnd = widget.loopEnd;
     
-    // Update callbacks just in case closures changed
     _interactionController.onSeek = widget.onSeek;
     _interactionController.onLoopRangeChanged = widget.onLoopRangeChanged;
     _interactionController.onLoopRangeChangeEnd = widget.onLoopRangeChangeEnd;
@@ -152,55 +151,102 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
                 onTapUp: (details) => _interactionController.handleTap(details, width),
                 child: Column(
                   children: [
-                    if (widget.bpm != null && widget.bpm! > 0 && widget.timeSignatureNumerator != null && widget.timeSignatureNumerator! > 0)
-                      LoopRuler(
-                        width: width,
-                        totalMs: totalMilliseconds,
-                        bpm: widget.bpm!,
-                        timeSignatureNumerator: widget.timeSignatureNumerator!,
-                        preWaitMeasures: widget.preWaitMeasures,
-                        countInMeasures: widget.countInMeasures,
-                        duration: widget.duration,
-                        loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
-                        loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
-                        isLoopEnabled: widget.isLoopEnabled,
-                        zoomLevel: _interactionController.zoomLevel,
-                        scrollOffset: _interactionController.scrollOffset,
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Perfect 16px visual match with header/transport
+                      padding: const EdgeInsets.all(6), // Shared bezel
+                      decoration: BoxDecoration(
+                        color: AppColors.surface(context), // Base panel color
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                           BoxShadow(
+                             color: Colors.black.withOpacity(0.08),
+                             blurRadius: 10,
+                             offset: const Offset(0, 4),
+                           ),
+                           BoxShadow(
+                             color: AppColors.surfaceHighlight(context).withOpacity(0.3),
+                             offset: const Offset(0, 1),
+                             blurRadius: 0,
+                           )
+                        ],
                       ),
-                      
-                    ClipRect(
-                      child: Container(
-                        height: height,
-                        width: width,
-                        color: Colors.black26, 
-                        child: CustomPaint(
-                          painter: WaveformPainter(
-                            waveformData: widget.waveformData,
-                            position: Duration(milliseconds: currentMilliseconds.toInt()),
-                            duration: widget.duration,
-                            color: Colors.cyanAccent,
-                            isLoopEnabled: widget.isLoopEnabled,
-                            loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
-                            loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
-                            zoomLevel: _interactionController.zoomLevel,
-                            scrollOffset: _interactionController.scrollOffset,
-                          ),
-                        ),
-                      ),
-                    ),
-                    
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            _formatDuration(Duration(milliseconds: currentMilliseconds.toInt())),
-                            style: const TextStyle(fontSize: 12, color: Colors.white70, fontFamily: "monospace"),
+                          if (widget.bpm != null && widget.bpm! > 0 && widget.timeSignatureNumerator != null && widget.timeSignatureNumerator! > 0)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 1.0), // Align exactly with the 1px border of the waveform container below
+                              child: LoopRuler(
+                                width: width - 34, // 32 for outer margin/padding + 2 for the waveform borders
+                                totalMs: totalMilliseconds,
+                                bpm: widget.bpm!,
+                                timeSignatureNumerator: widget.timeSignatureNumerator!,
+                                preWaitMeasures: widget.preWaitMeasures,
+                                countInMeasures: widget.countInMeasures,
+                                duration: widget.duration,
+                                loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
+                                loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
+                                isLoopEnabled: widget.isLoopEnabled,
+                                zoomLevel: _interactionController.zoomLevel,
+                                scrollOffset: _interactionController.scrollOffset,
+                              ),
+                            ),
+                            
+                          Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.faderTrack(context).withOpacity(0.8), // Inset waveform area
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppColors.border(context).withOpacity(0.5)),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(5),
+                              child: SizedBox(
+                                height: height,
+                                width: width - 32, 
+                                child: CustomPaint(
+                                  painter: WaveformPainter(
+                                    waveformData: widget.waveformData,
+                                    position: Duration(milliseconds: currentMilliseconds.toInt()),
+                                    duration: widget.duration,
+                                    color: AppColors.accentCyan(context),
+                                    playheadColor: AppColors.textPrimary(context),
+                                    isLoopEnabled: widget.isLoopEnabled,
+                                    loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
+                                    loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
+                                    zoomLevel: _interactionController.zoomLevel,
+                                    scrollOffset: _interactionController.scrollOffset,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                          Text(
-                            _formatDuration(widget.duration),
-                            style: const TextStyle(fontSize: 12, color: Colors.white70, fontFamily: "monospace"),
+                          
+                          // Time Labels moved inside the bezel
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _formatDuration(Duration(milliseconds: currentMilliseconds.toInt())),
+                                  style: TextStyle(
+                                    fontSize: 11, 
+                                    color: AppColors.textPrimary(context).withOpacity(0.8), 
+                                    fontWeight: FontWeight.w600,
+                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                  ),
+                                ),
+                                Text(
+                                  _formatDuration(widget.duration),
+                                  style: TextStyle(
+                                    fontSize: 11, 
+                                    color: AppColors.textPrimary(context).withOpacity(0.5), 
+                                    fontWeight: FontWeight.w600,
+                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),

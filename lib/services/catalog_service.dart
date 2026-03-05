@@ -74,12 +74,19 @@ class CatalogService {
     // Duo: assets/audio/Con instrumento/Capitulo X/Capitulo X-Duo-Inst.wav
     // Ej: assets/audio/Con instrumento/Capitulo X/Capitulo X-Ej Y-Inst.wav
     String getDuoPath(String instrument) {
+      if (chapterNum >= 1 && chapterNum <= 3) {
+        return 'assets/audio/Con instrumento/Capitulo $chapterNum M4A/Capitulo $chapterNum-Duo-$instrument.m4a';
+      }
       return 'assets/audio/Con instrumento/Capitulo $chapterNum/Capitulo $chapterNum-Duo-$instrument.wav';
     }
 
     String getPath(int exNum, String instrument) {
       String exPrefix = 'Ej';
       if (chapterNum == 2 && exNum == 1) exPrefix = 'EJ'; // Based on file list 'Capitulo 2-EJ 1-...'
+      
+      if (chapterNum >= 1 && chapterNum <= 3) {
+        return 'assets/audio/Con instrumento/Capitulo $chapterNum M4A/Capitulo $chapterNum-$exPrefix $exNum-$instrument.m4a';
+      }
       return 'assets/audio/Con instrumento/Capitulo $chapterNum/Capitulo $chapterNum-$exPrefix $exNum-$instrument.wav';
     }
 
@@ -128,10 +135,8 @@ class CatalogService {
       TrackData(id: 'bb', name: 'Bombo', assetPath: getDuoPath('Bombo')),
     ];
     
-    // Capitulo 1 Duo does NOT have a Piano track in the assets!
-    if (chapterNum != 1) {
-      duoTracks.insert(2, TrackData(id: 'pn', name: 'Piano', assetPath: getDuoPath('Piano')));
-    }
+    // Chapter 1 Duo did not have a Piano originally, but the user just added it.
+    duoTracks.insert(2, TrackData(id: 'pn', name: 'Piano', assetPath: getDuoPath('Piano')));
 
     exercises.add(Exercise(
       id: 'i_c${chapterNum}_duo',

@@ -12,57 +12,62 @@ class TransportSection extends StatelessWidget {
     final mixer = context.watch<MixerProvider>();
 
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          top: BorderSide(color: AppColors.border, width: 1),
-        ),
+      margin: const EdgeInsets.only(left: 16, right: 16, bottom: 8), // Lifted slightly off the bottom, aligns with 16px pad
+      decoration: BoxDecoration(
+        color: AppColors.surface(context), // Warm card color
+        borderRadius: BorderRadius.circular(12), // Matches Waveform and Stems
+        border: Border.all(color: AppColors.border(context).withOpacity(0.5), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: AppColors.surfaceHighlight(context).withOpacity(0.3), // Inner lip responsive to theme
+            spreadRadius: -2,
+            blurRadius: 4,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0), // Reduced margins
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Play/Pause
-          StreamBuilder<bool>(
-             stream: mixer.dirtyStream,
-             initialData: mixer.isDirty,
-             builder: (context, snapshot) {
-                final isDirty = snapshot.data ?? false;
-                final bool pendingRender = mixer.isOfflineMode && isDirty;
-                
-                return _TransportButton(
-                  icon: mixer.isPlaying ? Icons.pause : (pendingRender ? Icons.downloading : Icons.play_arrow),
-                  isActive: mixer.isPlaying || pendingRender,
-                  activeColor: pendingRender ? Colors.orange : AppColors.accentCyan,
-                  onPressed: () {
-                     if (pendingRender) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                           const SnackBar(content: Text("Rendering changes..."), duration: Duration(seconds: 1)),
-                        );
-                     }
-                     mixer.togglePlay();
-                  },
-                );
-             }
-          ),
-          const SizedBox(width: 8), // Reduced
-          
-          // Stop
-          _TransportButton(
-            icon: Icons.stop,
-            isActive: false, 
-            activeColor: Colors.red, // Not used when inactive but consistent
-            onPressed: () => mixer.stop(),
-          ),
-          const SizedBox(width: 4), // Reduced
+          Row(
+            children: [
+              // Play/Pause
+              _TransportButton(
+                icon: mixer.isPlaying ? Icons.pause : Icons.play_arrow,
+                isActive: mixer.isPlaying,
+                activeColor: AppColors.accentCyan(context),
+                size: 44, // Slightly larger
+                onPressed: () => mixer.togglePlay(),
+              ),
+              const SizedBox(width: 8), 
+              
+              // Stop
+              _TransportButton(
+                icon: Icons.stop,
+                isActive: false, 
+                activeColor: Colors.red, 
+                size: 36,
+                onPressed: () => mixer.stop(),
+              ),
+              const SizedBox(width: 8), 
 
-          // Loop Toggle
-          _TransportButton(
-             icon: Icons.loop,
-             isActive: mixer.isLooping,
-             activeColor: AppColors.accentCyan,
-             onPressed: () => mixer.toggleLoop(),
+              // Loop Toggle
+              _TransportButton(
+                 icon: Icons.loop,
+                 isActive: mixer.isLooping,
+                 activeColor: AppColors.accentCyan(context),
+                 size: 36,
+                 onPressed: () => mixer.toggleLoop(),
+              ),
+            ],
           ),
-          const SizedBox(width: 8), // Reduced
+          const SizedBox(width: 8), 
 
           // Speed / Master Control
           Expanded(
@@ -84,36 +89,45 @@ class _TransportButton extends StatelessWidget {
   final bool isActive;
   final Color activeColor;
   final VoidCallback onPressed;
+  final double size;
 
   const _TransportButton({
     required this.icon,
     required this.isActive,
     required this.activeColor,
     required this.onPressed,
+    this.size = 36,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onPressed,
-      child: Container(
-        width: 40, // Slightly smaller to fit 3 buttons nicely
-        height: 40,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: size,
+        height: size,
         decoration: BoxDecoration(
-          color: isActive ? activeColor.withValues(alpha: 0.2) : const Color(0xFF252525),
-          borderRadius: BorderRadius.circular(4),
+          color: isActive ? activeColor : AppColors.background(context),
+          shape: BoxShape.circle,
           border: Border.all(
-            color: isActive ? activeColor : Colors.black54,
-            width: 1.5,
+             color: isActive ? activeColor.withOpacity(0.8) : AppColors.border(context).withOpacity(0.8),
+             width: 1.5,
           ),
-          boxShadow: isActive 
-            ? [BoxShadow(color: activeColor.withValues(alpha: 0.4), blurRadius: 8, spreadRadius: 1)]
-            : [],
+          boxShadow: isActive
+              ? [
+                  BoxShadow(color: activeColor.withOpacity(0.5), blurRadius: 12, spreadRadius: 2, offset: const Offset(0, 4)),
+                  const BoxShadow(color: Colors.white30, offset: Offset(0, 2), blurRadius: 2), // Inner highlight
+                ]
+              : [
+                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2)),
+                ],
         ),
         child: Icon(
           icon,
-          color: isActive ? activeColor : Colors.white70,
-          size: 22, // Slightly smaller icon
+          color: isActive ? Colors.white : AppColors.textPrimary(context).withOpacity(0.8),
+          size: size * 0.55, 
+          shadows: isActive ? [Shadow(color: Colors.white.withOpacity(0.5), blurRadius: 6)] : [],
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:elongacion_musical/constants/app_colors.dart';
 
 class SeekBar extends StatelessWidget {
   final Duration duration;
@@ -24,10 +25,10 @@ class SeekBar extends StatelessWidget {
       children: [
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            activeTrackColor: Colors.cyanAccent,
-            inactiveTrackColor: Colors.white10,
-            thumbColor: Colors.cyanAccent,
-            overlayColor: Colors.cyanAccent.withValues(alpha: 0.1),
+            activeTrackColor: AppColors.accentCyan(context),
+            inactiveTrackColor: AppColors.faderTrack(context),
+            thumbColor: AppColors.accentCyan(context),
+            overlayColor: AppColors.accentCyan(context).withValues(alpha: 0.1),
             trackHeight: 2.0,
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.0),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14.0),
@@ -56,11 +57,11 @@ class SeekBar extends StatelessWidget {
             children: [
               Text(
                 _formatDuration(position), 
-                style: const TextStyle(fontSize: 10, color: Colors.white54, fontFamily: "monospace")
+                style: TextStyle(fontSize: 10, color: AppColors.textSecondary(context), fontFamily: "monospace")
               ),
               Text(
                 _formatDuration(duration), 
-                style: const TextStyle(fontSize: 10, color: Colors.white54, fontFamily: "monospace")
+                style: TextStyle(fontSize: 10, color: AppColors.textSecondary(context), fontFamily: "monospace")
               ),
             ],
           ),

@@ -1,18 +1,19 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:elongacion_musical/constants/app_colors.dart';
 
 class FaderControl extends StatefulWidget {
   final double volume; // Linear Amplitude (0.0 to 2.0+)
   final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
-  final Color color;
+  final Color? color;
 
   const FaderControl({
     super.key,
     required this.volume,
     required this.onChanged,
     required this.onChangeEnd,
-    this.color = Colors.cyanAccent,
+    this.color,
   });
 
   @override
@@ -74,22 +75,24 @@ class _FaderControlState extends State<FaderControl> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
-        title: const Text("Enter Volume (dB)", style: TextStyle(color: Colors.white)),
+        backgroundColor: AppColors.surfaceHighlight(context), // Warmer dialog
+        title: Text("Volume (dB)", style: TextStyle(color: AppColors.textPrimary(context))),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
+          style: TextStyle(color: AppColors.textPrimary(context)),
+          decoration: InputDecoration(
             hintText: "e.g. -6.0",
-            hintStyle: TextStyle(color: Colors.grey),
+            hintStyle: TextStyle(color: AppColors.textSecondary(context)),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.border(context))),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentCyan(context))),
           ),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
+            child: Text("Cancel", style: TextStyle(color: AppColors.textSecondary(context))),
           ),
           TextButton(
             onPressed: () {
@@ -103,7 +106,7 @@ class _FaderControlState extends State<FaderControl> {
               }
               Navigator.pop(ctx);
             },
-            child: const Text("OK"),
+            child: Text("OK", style: TextStyle(color: AppColors.accentCyan(context), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -114,6 +117,8 @@ class _FaderControlState extends State<FaderControl> {
   Widget build(BuildContext context) {
     final double position = _amplitudeToPosition(widget.volume);
     final String dbLabel = _amplitudeToDbString(widget.volume);
+    final effectiveColor = widget.color ?? AppColors.accentAmber(context);
+    final isDark = AppColors.isDark(context); // Get theme mode
 
     return Column(
       children: [
@@ -121,18 +126,25 @@ class _FaderControlState extends State<FaderControl> {
         GestureDetector(
           onTap: () => _showValueDialog(context),
           child: Container(
-            height: 20,
-            alignment: Alignment.center,
+            height: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.background(context).withOpacity(0.5),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: AppColors.border(context), width: 0.5),
+            ),
             child: Text(
               dbLabel,
               style: TextStyle(
-                color: widget.color, 
+                color: effectiveColor, 
                 fontSize: 10, 
-                fontWeight: FontWeight.bold
+                fontWeight: FontWeight.w800,
+                fontFamily: 'monospace', // Studio console feel
               ),
             ),
           ),
         ),
+        const SizedBox(height: 8),
         
         Expanded(
           child: LayoutBuilder(
@@ -140,10 +152,7 @@ class _FaderControlState extends State<FaderControl> {
               final h = constraints.maxHeight;
               final w = constraints.maxWidth;
               
-              // Thumb Y position (0 at top visually for canvas?)
-              // Canvas usually (0,0) top-left.
-              // So thumb Y = h - (position * h)
-              
+              // Thumb Y position
               return GestureDetector(
                 onVerticalDragUpdate: (details) {
                   _handleDrag(details.localPosition.dy, h);
@@ -165,7 +174,12 @@ class _FaderControlState extends State<FaderControl> {
                   painter: _FaderPainter(
                     position: position,
                     unityPos: 0.75,
-                    color: widget.color,
+                    color: effectiveColor,
+                    textSecondaryColor: AppColors.textSecondary(context),
+                    textPrimaryColor: AppColors.textPrimary(context),
+                    trackBgColor: AppColors.faderTrack(context),
+                    slitColor: isDark ? Colors.black87 : const Color(0xFF2A1C16),
+                    isDark: isDark, // Pass boolean
                   ),
                 ),
               );
@@ -181,8 +195,22 @@ class _FaderPainter extends CustomPainter {
   final double position; // 0.0 to 1.0
   final double unityPos;
   final Color color;
+  final Color textSecondaryColor;
+  final Color textPrimaryColor;
+  final Color trackBgColor;
+  final Color slitColor;
+  final bool isDark;
 
-  _FaderPainter({required this.position, required this.unityPos, required this.color});
+  _FaderPainter({
+     required this.position,
+     required this.unityPos,
+     required this.color,
+     required this.textSecondaryColor,
+     required this.textPrimaryColor,
+     required this.trackBgColor,
+     required this.slitColor,
+     required this.isDark,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -191,84 +219,114 @@ class _FaderPainter extends CustomPainter {
     
     final centerX = w / 2;
     
-    // 1. Groove (Background Track)
-    final paintGroove = Paint()
-      ..color = Colors.black45
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-      
-    canvas.drawLine(
-      Offset(centerX, 0),
-      Offset(centerX, h),
-      paintGroove,
+    // 1. Recessed Track Background (Darker, Inner Shadow look)
+    final trackWidth = 12.0;
+    final trackRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: Offset(centerX, h / 2), width: trackWidth, height: h),
+      const Radius.circular(6)
     );
     
-    // 2. Active Line (Colored, Thin)
-    // From Bottom (h) to Current Pos
-    final thumbY = h - (position * h);
+    // Draw outer track inset
+    final paintTrackBg = Paint()
+      ..color = trackBgColor
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(trackRect, paintTrackBg);
     
-    final paintActive = Paint()
-      ..color = color //.withOpacity(0.8)
-      ..strokeWidth = 2; // "muccho mas fina"
-      
-    canvas.drawLine(
-      Offset(centerX, thumbY),
-      Offset(centerX, h),
-      paintActive,
+    // Draw dark inner slit
+    final slitWidth = 4.0;
+    final slitRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: Offset(centerX, h / 2), width: slitWidth, height: h - 4),
+      const Radius.circular(2)
     );
-    
-    // 3. Unity Marker (0dB)
-    final unityY = h - (unityPos * h);
-    final paintMarker = Paint()
-      ..color = Colors.white30
+    final paintSlit = Paint()
+      ..color = slitColor 
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(slitRect, paintSlit);
+    // 2. Ticks (Scale markers)
+    final paintTick = Paint()
+      ..color = textSecondaryColor.withOpacity(0.5)
       ..strokeWidth = 1;
       
-    canvas.drawLine(
-      Offset(centerX - 6, unityY),
-      Offset(centerX + 6, unityY),
-      paintMarker,
-    );
+    // Draw 0dB slightly thicker
+    final unityY = h - (unityPos * h);
+    final paintZeroDb = Paint()
+      ..color = textPrimaryColor
+      ..strokeWidth = 2;
+    canvas.drawLine(Offset(centerX - 14, unityY), Offset(centerX - 8, unityY), paintZeroDb);
+    canvas.drawLine(Offset(centerX + 8, unityY), Offset(centerX + 14, unityY), paintZeroDb);
+
+    // Draw some subtle ticks
+    for(int i=1; i<=4; i++) {
+        double posY = h - ((unityPos * (i/4)) * h);
+        canvas.drawLine(Offset(centerX - 10, posY), Offset(centerX - 8, posY), paintTick);
+    }
     
-    // 4. Thumb (Cap)
-    // "Perilla tipica del slider" -> Rectangle/RoundedRect
+    // 3. Thumb (Cap) - Metallic/3D look
+    final thumbY = h - (position * h);
     
     final thumbRect = Rect.fromCenter(
       center: Offset(centerX, thumbY),
-      width: 24,
-      height: 36, // Tall fader cap
+      width: 28, // Wider
+      height: 48, // Taller
     );
     
+    // Beautiful soft drop shadow
+    final shadowPath = Path()..addRRect(RRect.fromRectAndRadius(thumbRect, const Radius.circular(4)));
+    canvas.drawShadow(shadowPath.shift(const Offset(0, 6)), Colors.black.withOpacity(0.3), 12, true);
+    canvas.drawShadow(shadowPath.shift(const Offset(0, 2)), Colors.black.withOpacity(0.15), 4, true);
+
+    // Thumb Body Gradient (Warm Steel vs Dark Steel)
+    final List<Color> gradientColors = isDark 
+        ? [const Color(0xFF4A443F), const Color(0xFF322C28), const Color(0xFF241F1C)] // Dark steel
+        : [const Color(0xFFFDFBF7), const Color(0xFFE8E0D5), const Color(0xFFD5CABB)]; // Light steel
+
     final paintThumb = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xFF444444), Color(0xFF111111)],
+      ..shader = LinearGradient(
+        colors: gradientColors, 
+        stops: const [0.0, 0.4, 1.0],
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
       ).createShader(thumbRect);
 
-    // Shadow
-    final shadowPath = Path()..addRRect(RRect.fromRectAndRadius(thumbRect.translate(0, 2), const Radius.circular(3)));
-    canvas.drawShadow(shadowPath, Colors.black, 3, true);
-
-    // Body
     canvas.drawRRect(
-      RRect.fromRectAndRadius(thumbRect, const Radius.circular(3)),
+      RRect.fromRectAndRadius(thumbRect, const Radius.circular(4)),
       paintThumb,
     );
     
-    // Center line on thumb
-    final paintThumbLine = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2;
-      
-    canvas.drawLine(
-      Offset(thumbRect.left + 2, thumbRect.center.dy),
-      Offset(thumbRect.right - 2, thumbRect.center.dy),
-      paintThumbLine,
+    // Inner bevel highlight
+    final paintHighlight = Paint()
+      ..color = isDark ? Colors.white24 : Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(thumbRect.deflate(1), const Radius.circular(3)),
+      paintHighlight,
     );
+    
+    // 4. Glowing Indicator Line
+    final centerLineRect = Rect.fromCenter(
+      center: Offset(centerX, thumbY),
+      width: 18,
+      height: 4,
+    );
+    
+    // Indicator Base
+    final paintIndicatorBg = Paint()..color = isDark ? Colors.black : const Color(0xFF2A1C16);
+    canvas.drawRect(centerLineRect, paintIndicatorBg);
+
+    // Glow Effect
+    final paintGlow = Paint()
+      ..color = color
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawRect(centerLineRect.deflate(0.5), paintGlow);
+
+    // Bright Center Let
+    final paintIndicatorPulse = Paint()..color = Colors.white.withOpacity(0.8);
+    canvas.drawRect(centerLineRect.deflate(1), paintIndicatorPulse);
   }
 
   @override
   bool shouldRepaint(covariant _FaderPainter oldDelegate) {
-    return oldDelegate.position != position;
+    return oldDelegate.position != position || oldDelegate.color != color;
   }
 }

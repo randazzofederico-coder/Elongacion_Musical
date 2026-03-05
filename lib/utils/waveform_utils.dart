@@ -67,8 +67,19 @@ List<List<double>> generateMasterWaveform(
     // Add Synthetic Metronome Clicks if active
     if (bpm != null && bpm > 0 && (metronomeVol34 > 0 || metronomeVol68 > 0)) {
         // Find total duration to sample
-        // Assumes 100 points per second (from WavParser)
-        final double pointsPerSecond = 100.0; 
+        // Dynamically calculate points per second to match exactly how the tracks were parsed
+        double pointsPerSecond = 100.0; // Fallback
+        
+        for (var t in tracks) {
+            if (t.waveformData.isNotEmpty && t.totalFrames != null && t.sampleRate != null) {
+                double durationInSeconds = t.totalFrames! / t.sampleRate!;
+                if (durationInSeconds > 0) {
+                    pointsPerSecond = t.waveformData[0].length / durationInSeconds;
+                    break;
+                }
+            }
+        }
+        
         final double secondsPerBeat = 60.0 / bpm;
         final double secondsPerEighth = secondsPerBeat / 2.0;
         final double pointsPerEighth = secondsPerEighth * pointsPerSecond;

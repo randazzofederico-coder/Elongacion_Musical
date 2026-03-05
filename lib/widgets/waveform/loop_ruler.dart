@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:elongacion_musical/widgets/waveform/loop_ruler_painter.dart';
+import 'package:elongacion_musical/constants/app_colors.dart';
 
 class LoopRuler extends StatelessWidget {
   final double width;
@@ -36,22 +37,28 @@ class LoopRuler extends StatelessWidget {
     return Container(
       height: 24, // Taller for better touch target
       width: width,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        border: Border(bottom: BorderSide(color: Colors.white24, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        border: Border(bottom: BorderSide(color: AppColors.border(context), width: 1.0)),
       ),
-      child: CustomPaint(
-        painter: LoopRulerPainter(
-          bpm: bpm,
-          timeSignatureTop: timeSignatureNumerator,
-          preWaitMeasures: preWaitMeasures,
-          countInMeasures: countInMeasures,
-          duration: duration,
-          loopStart: loopStart,
-          loopEnd: loopEnd,
-          isLoopEnabled: isLoopEnabled,
-          zoomLevel: zoomLevel,
-          scrollOffset: scrollOffset,
+      child: ClipRect(
+        child: CustomPaint(
+          painter: LoopRulerPainter(
+            bpm: bpm,
+            timeSignatureTop: timeSignatureNumerator,
+            preWaitMeasures: preWaitMeasures,
+            countInMeasures: countInMeasures,
+            duration: duration,
+            loopStart: loopStart,
+            loopEnd: loopEnd,
+            isLoopEnabled: isLoopEnabled,
+            zoomLevel: zoomLevel,
+            scrollOffset: scrollOffset,
+            borderColor: AppColors.border(context),
+            textSecondaryColor: AppColors.textSecondary(context),
+            textPrimaryColor: AppColors.textPrimary(context),
+            accentColor: AppColors.accentCyan(context),
+          ),
         ),
       ),
     );

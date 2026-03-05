@@ -10,7 +10,8 @@ import 'package:elongacion_musical/providers/mixer_settings_provider.dart';
 class MixerProvider with ChangeNotifier {
   final SettingsService _settingsService;
   late final AudioManager _audioManager;
-  
+  AudioManager get audioManager => _audioManager;
+
   late final PlaybackProvider playback;
   late final TrackListProvider trackList;
   late final MixerSettingsProvider mixerSettings;
@@ -59,7 +60,7 @@ class MixerProvider with ChangeNotifier {
   Stream<Duration> get bufferedPositionStream => playback.bufferedPositionStream;
   Duration? get duration => playback.duration;
   Duration get currentPosition => playback.currentPosition;
-  bool get isOfflineMode => _audioManager.mode == AudioEngineMode.offline;
+
 
   // Playback Passthrough
   bool get isPlaying => playback.isPlaying;
@@ -129,7 +130,7 @@ class MixerProvider with ChangeNotifier {
   bool get lockPortrait => mixerSettings.lockPortrait;
   Future<void> toggleShowWaveforms() => mixerSettings.toggleShowWaveforms();
   Future<void> toggleLockPortrait() => mixerSettings.toggleLockPortrait();
-  Future<void> setAudioMode(AudioEngineMode mode) => mixerSettings.setAudioMode(mode);
+
 
   int get stSequenceMs => mixerSettings.stSequenceMs;
   int get stSeekWindowMs => mixerSettings.stSeekWindowMs;

@@ -28,81 +28,104 @@ class TrackControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: showWaveform ? const Border(left: BorderSide(color: AppColors.border, width: 1)) : null
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          // VOLUME CONTROL: Fader (Top)
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4.0), // Reduced
-              child: FaderControl(
-                volume: track.volume,
-                onChanged: onVolumeChanged,
-                onChangeEnd: onVolumeChangeEnd,
-              ),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        // VOLUME CONTROL: Fader (Top)
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0), 
+            child: FaderControl(
+              volume: track.volume,
+              onChanged: onVolumeChanged,
+              onChangeEnd: onVolumeChangeEnd,
+              color: AppColors.accentCyan(context),
             ),
           ),
-          
-          // Pan Knob
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0), // Reduced
-            child: Transform.scale(
-              scale: 0.65, // Made it smaller to save vertical space
-              child: KnobControl(
+        ),
+        
+        // Bottom Controls Container (Fixed Height to ensure symmetry)
+        // Set to 110 to safely contain buttons and native sized knob without overflow
+        SizedBox(
+          height: 110, 
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Pan Knob
+              KnobControl(
                 value: track.pan,
                 onChanged: onPanChanged,
                 label: "PAN",
                 min: -1.0,
                 max: 1.0,
+                zeroAtCenter: true,
+                size: 28, // Native layout size instead of Transform.scale!
               ),
-            ),
+              const Spacer(), // Pushes buttons to bottom
+              
+              // Buttons (Mute / Solo)
+              _buildTactileButton(
+                context: context,
+                label: "M",
+                isActive: track.isMuted,
+                activeColor: AppColors.accentRed(context),
+                onTap: onMuteToggle,
+              ),
+              const SizedBox(height: 6),
+              _buildTactileButton(
+                context: context,
+                label: "S",
+                isActive: track.isSolo,
+                activeColor: AppColors.accentAmber(context),
+                onTap: onSoloToggle,
+              ),
+              const SizedBox(height: 4), // Reduced safe margin
+            ],
           ),
-          
-          // Buttons (Mute / Solo)
-           Container(
-             padding: const EdgeInsets.only(bottom: 6), // Reduced
-             child: Column(
-               children: [
-                 // MUTE
-                 GestureDetector(
-                   onTap: onMuteToggle,
-                   child: Container(
-                     width: 30, // Compact
-                     height: 22, // Compact
-                     margin: const EdgeInsets.only(bottom: 4),
-                     decoration: BoxDecoration(
-                       color: track.isMuted ? AppColors.accentRed : AppColors.surfaceHighlight,
-                       borderRadius: BorderRadius.circular(3),
-                       border: Border.all(color: Colors.black54),
-                     ),
-                     alignment: Alignment.center,
-                     child: const Text("M", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                   ),
-                 ),
-                 
-                 // SOLO
-                 GestureDetector(
-                   onTap: onSoloToggle,
-                   child: Container(
-                     width: 30, // Compact
-                     height: 22, // Compact
-                     decoration: BoxDecoration(
-                       color: track.isSolo ? AppColors.accentAmber : AppColors.surfaceHighlight,
-                       borderRadius: BorderRadius.circular(3),
-                       border: Border.all(color: Colors.black54),
-                     ),
-                     alignment: Alignment.center,
-                     child: Text("S", style: TextStyle(color: track.isSolo ? Colors.black : Colors.white60, fontWeight: FontWeight.bold, fontSize: 11)),
-                   ),
-                 ),
-               ],
-             ),
-           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTactileButton({
+    required BuildContext context,
+    required String label,
+    required bool isActive,
+    required Color activeColor,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 34, 
+        height: 24, 
+        decoration: BoxDecoration(
+          color: isActive ? activeColor : AppColors.surfaceHighlight(context).withOpacity(0.5),
+          borderRadius: BorderRadius.circular(6), 
+          border: Border.all(
+            color: isActive ? activeColor.withOpacity(0.8) : AppColors.border(context),
+            width: 1,
+          ),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(color: activeColor.withOpacity(0.6), blurRadius: 8, spreadRadius: 1),
+                  const BoxShadow(color: Colors.white24, offset: Offset(0, 1), blurRadius: 1), 
+                ]
+              : [
+                  const BoxShadow(color: Colors.black12, offset: Offset(0, 2), blurRadius: 2),
+                ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label, 
+          style: TextStyle(
+            color: isActive ? Colors.white : AppColors.textPrimary(context).withOpacity(0.7), 
+            fontWeight: FontWeight.w900, 
+            fontSize: 12,
+            shadows: isActive ? [Shadow(color: Colors.white.withOpacity(0.5), blurRadius: 4)] : [],
+          )
+        ),
       ),
     );
   }

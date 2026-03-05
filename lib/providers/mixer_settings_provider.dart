@@ -15,11 +15,6 @@ class MixerSettingsProvider extends ChangeNotifier {
   int get stSeekWindowMs => _settingsService.stSeekWindowMs;
   int get stOverlapMs => _settingsService.stOverlapMs;
 
-  Future<void> setAudioMode(AudioEngineMode mode) async {
-     await _settingsService.setAudioMode(mode);
-     notifyListeners();
-  }
-
   Future<void> toggleShowWaveforms() async {
     await _settingsService.setShowWaveforms(!showWaveforms);
     notifyListeners();

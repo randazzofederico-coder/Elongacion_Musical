@@ -14,11 +14,12 @@ class ChapterScreen extends StatelessWidget {
     final instrumentExercises = chapter.exercises.where((e) => e.type == ExerciseType.instrument).toList();
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.background(context),
       appBar: AppBar(
-        title: Text(chapter.title),
-        backgroundColor: AppColors.surface,
-        leading: const BackButton(color: Colors.white),
+        title: Text(chapter.title, style: TextStyle(color: AppColors.textPrimary(context))),
+        backgroundColor: AppColors.surface(context),
+        foregroundColor: AppColors.textPrimary(context),
+        leading: BackButton(color: AppColors.textPrimary(context)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -54,8 +55,8 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
         title,
-        style: const TextStyle(
-          color: AppColors.accentCyan,
+        style: TextStyle(
+          color: AppColors.accentCyan(context),
           fontSize: 18,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.1,
@@ -72,18 +73,18 @@ class _ExerciseTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: AppColors.surface,
+      color: AppColors.surface(context),
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: Icon(
           exercise.type == ExerciseType.rhythmic ? Icons.timer : Icons.music_note,
-          color: Colors.white54,
+          color: AppColors.textSecondary(context),
         ),
         title: Text(
           exercise.title,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w600),
         ),
-        trailing: const Icon(Icons.play_circle_fill, color: AppColors.accentCyan),
+        trailing: Icon(Icons.play_circle_fill, color: AppColors.accentCyan(context)),
         onTap: () {
           Navigator.push(
             context,
