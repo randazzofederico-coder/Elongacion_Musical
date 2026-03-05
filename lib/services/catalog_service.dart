@@ -34,12 +34,13 @@ class CatalogService {
      return List.generate(10, (index) {
        final num = index + 1;
        
-       if (num >= 1 && num <= 3) {
-         // --- REAL DATA FOR CHAPTERS 1, 2 AND 3 ---
+       if (num >= 1 && num <= 4) {
+         // --- REAL DATA FOR CHAPTERS 1 TO 4 ---
          int numExercises = 3; // default fallback
          if (num == 1) numExercises = 7;
          if (num == 2) numExercises = 6;
          if (num == 3) numExercises = 3;
+         if (num == 4) numExercises = 4;
          return _buildInstrumentChapter(num, numExercises);
        }
 
@@ -74,7 +75,7 @@ class CatalogService {
     // Duo: assets/audio/Con instrumento/Capitulo X/Capitulo X-Duo-Inst.wav
     // Ej: assets/audio/Con instrumento/Capitulo X/Capitulo X-Ej Y-Inst.wav
     String getDuoPath(String instrument) {
-      if (chapterNum >= 1 && chapterNum <= 3) {
+      if (chapterNum >= 1 && chapterNum <= 4) {
         return 'assets/audio/Con instrumento/Capitulo $chapterNum M4A/Capitulo $chapterNum-Duo-$instrument.m4a';
       }
       return 'assets/audio/Con instrumento/Capitulo $chapterNum/Capitulo $chapterNum-Duo-$instrument.wav';
@@ -84,7 +85,19 @@ class CatalogService {
       String exPrefix = 'Ej';
       if (chapterNum == 2 && exNum == 1) exPrefix = 'EJ'; // Based on file list 'Capitulo 2-EJ 1-...'
       
-      if (chapterNum >= 1 && chapterNum <= 3) {
+      if (chapterNum >= 1 && chapterNum <= 4) {
+        // Special case for Chapter 4 Ej 1 where there are 1a and 1b files
+        if (chapterNum == 4 && exNum == 1) {
+            String suffix = '1a';
+            // We'll map Fl2 to 1b, while everything else goes to 1a
+            if (instrument == 'Fl2') {
+                suffix = '1b';
+                instrument = 'Fl Solista'; // The actual file is named "Ej 1b-Fl Solista"
+            } else if (instrument == 'Fl1') {
+                instrument = 'Fl Solista'; // The actual file is named "Ej 1a-Fl Solista"
+            }
+            return 'assets/audio/Con instrumento/Capitulo $chapterNum M4A/Capitulo $chapterNum-$exPrefix $suffix-$instrument.m4a';
+        }
         return 'assets/audio/Con instrumento/Capitulo $chapterNum M4A/Capitulo $chapterNum-$exPrefix $exNum-$instrument.m4a';
       }
       return 'assets/audio/Con instrumento/Capitulo $chapterNum/Capitulo $chapterNum-$exPrefix $exNum-$instrument.wav';
@@ -96,8 +109,8 @@ class CatalogService {
       
       List<TrackData> tracks = [];
       
-      // Capitulo 3, Ejercicio 1 has Fl1 & Fl2 instead of Fl Solista
-      if (chapterNum == 3 && exNum == 1) {
+      // Capitulo 3, Ejercicio 1 and Capitulo 4, Ejercicio 1 have Fl1 & Fl2 instead of Fl Solista
+      if ((chapterNum == 3 || chapterNum == 4) && exNum == 1) {
         tracks = [
           TrackData(id: 'fl1', name: 'Flauta 1', assetPath: getPath(exNum, 'Fl1')),
           TrackData(id: 'fl2', name: 'Flauta 2', assetPath: getPath(exNum, 'Fl2')),

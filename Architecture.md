@@ -4,7 +4,8 @@
 - **Framework:** Flutter (Dart).
 - **Audio Engine:** `just_audio` (Platform) + `native_audio_engine` (Custom C++ Plugin using Miniaudio & SoundTouch).
 - **State Management:** `Provider`.
-- **Assets:** Audio library migrated to M4A/AAC format in `assets/audio/` for extreme compression without padding artifacts. Decodes to `Float32` RAM arrays during playback initialization for zero-latency mixing. In Android, uses `ffmpeg_kit_flutter_new_audio` for temporary WAV cache extraction when OS decoding fails.
+- **Assets:** Audio library migrated to M4A/AAC format in `assets/audio/` for extreme compression without padding artifacts. A Python utility script (`convert_all_to_m4a.py`) is used to bulk-convert new `.wav` files into `.m4a` when new chapters are added. Decodes to `Float32` RAM arrays during playback initialization for zero-latency mixing. In Android, uses `ffmpeg_kit_flutter_new_audio` for temporary WAV cache extraction when OS decoding fails.
+- **Content:** The application currently supports 4 complete educational Chapters, mapped dynamically via `CatalogService`, which handles both unified and split-soloist instrument definitions (e.g. `1a` and `1b` variations).
 - **Repository:** [GitHub - Elongacion_Musical](https://github.com/randazzofederico-coder/Elongacion_Musical.git)
 - **Status:** Connected and synced.
 
