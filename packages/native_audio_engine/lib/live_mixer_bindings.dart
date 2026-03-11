@@ -40,14 +40,14 @@ typedef LiveMixerSetMuteDart = void Function(Pointer<Void>, Pointer<Utf8>, bool)
 typedef LiveMixerSetSoloC = Void Function(Pointer<Void>, Pointer<Utf8>, Bool);
 typedef LiveMixerSetSoloDart = void Function(Pointer<Void>, Pointer<Utf8>, bool);
 
-typedef LiveMixerSetLoopC = Void Function(Pointer<Void>, Int64, Int64, Bool);
-typedef LiveMixerSetLoopDart = void Function(Pointer<Void>, int, int, bool);
+typedef LiveMixerSetLoopC = Void Function(Pointer<Void>, Double, Double, Bool);
+typedef LiveMixerSetLoopDart = void Function(Pointer<Void>, double, double, bool);
 
-typedef LiveMixerSeekC = Void Function(Pointer<Void>, Int64);
-typedef LiveMixerSeekDart = void Function(Pointer<Void>, int);
+typedef LiveMixerSeekC = Void Function(Pointer<Void>, Double);
+typedef LiveMixerSeekDart = void Function(Pointer<Void>, double);
 
-typedef LiveMixerGetPositionC = Int64 Function(Pointer<Void>);
-typedef LiveMixerGetPositionDart = int Function(Pointer<Void>);
+typedef LiveMixerGetPositionC = Double Function(Pointer<Void>);
+typedef LiveMixerGetPositionDart = double Function(Pointer<Void>);
 
 typedef LiveMixerProcessC = Int32 Function(Pointer<Void>, Pointer<Float>, Int32);
 typedef LiveMixerProcessDart = int Function(Pointer<Void>, Pointer<Float>, int);
@@ -220,15 +220,15 @@ class LiveMixerBindings {
       calloc.free(idPtr);
   }
 
-  void setLoop(Pointer<Void> mixer, int start, int end, bool enabled) {
+  void setLoop(Pointer<Void> mixer, double start, double end, bool enabled) {
       _setLoop(mixer, start, end, enabled);
   }
   
-  void seek(Pointer<Void> mixer, int position) {
+  void seek(Pointer<Void> mixer, double position) {
       _seek(mixer, position);
   }
 
-  int getPosition(Pointer<Void> mixer) {
+  double getPosition(Pointer<Void> mixer) {
       return _getPosition(mixer);
   }
 
@@ -240,7 +240,7 @@ class LiveMixerBindings {
   // --- NATIVE OUTPUT BINDINGS ---
   late final _start = _lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('live_mixer_start');
   late final _stop = _lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('live_mixer_stop');
-  late final _getAtomicPosition = _lib.lookupFunction<Int64 Function(Pointer<Void>), int Function(Pointer<Void>)>('live_mixer_get_atomic_position');
+  late final _getAtomicPosition = _lib.lookupFunction<Double Function(Pointer<Void>), double Function(Pointer<Void>)>('live_mixer_get_atomic_position');
   late final _setSpeed = _lib.lookupFunction<Void Function(Pointer<Void>, Float), void Function(Pointer<Void>, double)>('live_mixer_set_speed');
   late final _setSoundTouchSetting = _lib.lookupFunction<Void Function(Pointer<Void>, Int32, Int32), void Function(Pointer<Void>, int, int)>('live_mixer_set_soundtouch_setting');
   
@@ -255,7 +255,7 @@ class LiveMixerBindings {
 
   void start(Pointer<Void> mixer) => _start(mixer);
   void stop(Pointer<Void> mixer) => _stop(mixer);
-  int getAtomicPosition(Pointer<Void> mixer) => _getAtomicPosition(mixer);
+  double getAtomicPosition(Pointer<Void> mixer) => _getAtomicPosition(mixer);
   void setSpeed(Pointer<Void> mixer, double speed) => _setSpeed(mixer, speed);
   void setSoundTouchSetting(Pointer<Void> mixer, int settingId, int value) => _setSoundTouchSetting(mixer, settingId, value);
 

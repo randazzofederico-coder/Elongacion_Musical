@@ -109,17 +109,17 @@ class LiveMixer {
 
   void setLoop(int startSample, int endSample, bool enabled) {
     if (_isDisposed) return;
-    _bindings.setLoop(_handle, startSample, endSample, enabled);
+    _bindings.setLoop(_handle, startSample.toDouble(), endSample.toDouble(), enabled);
   }
 
   void seek(int positionSample) {
     if (_isDisposed) return;
-    _bindings.seek(_handle, positionSample);
+    _bindings.seek(_handle, positionSample.toDouble());
   }
 
   int getPosition() {
     if (_isDisposed) return 0;
-    return _bindings.getPosition(_handle);
+    return _bindings.getPosition(_handle).toInt();
   }
   
   /// Process audio.
@@ -157,7 +157,7 @@ class LiveMixer {
   
   int getAtomicPosition() {
      if (_isDisposed) return 0;
-     return _bindings.getAtomicPosition(_handle);
+     return _bindings.getAtomicPosition(_handle).toInt();
   }
   
   void setSpeed(double speed) {
