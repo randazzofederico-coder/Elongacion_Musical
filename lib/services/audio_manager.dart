@@ -3,19 +3,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:just_audio/just_audio.dart';
 import 'package:wav/wav.dart';
-import 'dart:ffi';
-import 'package:ffi/ffi.dart';
-import 'dart:io';
+import 'dart:io' show Platform, File;
 import 'package:path_provider/path_provider.dart';
-import 'package:native_audio_engine/live_mixer_bindings.dart';
 import 'package:native_audio_engine/live_mixer.dart';
+import 'package:native_audio_engine/audio_track_info.dart';
 import 'package:elongacion_musical/models/track_model.dart';
 import 'package:elongacion_musical/services/mixer_stream_source.dart';
 import 'package:elongacion_musical/services/settings_service.dart';
 import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_audio/return_code.dart';
+import 'package:rxdart/rxdart.dart';
 import 'dart:math';
-
 
 class AudioManager {
 
@@ -58,7 +56,7 @@ class AudioManager {
   MixerStreamSource? _source;
   
   // Stream Controllers
-  final _dirtyController = StreamController<bool>.broadcast();
+  final _dirtyController = BehaviorSubject<bool>.seeded(false);
   Stream<bool> get dirtyStream => _dirtyController.stream;
   bool _isDirty = false;
   bool get isDirty => _isDirty;
@@ -67,20 +65,19 @@ class AudioManager {
   AudioManager(SettingsService settingsService);
 
   // -- Playback State --
-  // We override positionStream to emit our manual polling updates
-  final _positionController = StreamController<Duration>.broadcast();
+  // Use BehaviorSubject to always provide the latest state to new listeners
+  final _positionController = BehaviorSubject<Duration>.seeded(Duration.zero);
   Stream<Duration> get positionStream => _positionController.stream;
   
-  // Custom Duration Stream (since we disconnected player)
-  final _durationController = StreamController<Duration?>.broadcast();
+  // Custom Duration Stream
+  final _durationController = BehaviorSubject<Duration?>.seeded(null);
   Stream<Duration?> get durationStream => _durationController.stream;
   
-  // Custom Player State Stream (to replace just_audio player state for play/pause sync)
-  final _playerStateController = StreamController<PlayerState>.broadcast();
+  // Custom Player State Stream
+  final _playerStateController = BehaviorSubject<PlayerState>.seeded(PlayerState(false, ProcessingState.ready));
   Stream<PlayerState> get playerStateStream => _playerStateController.stream;
   
   Stream<Duration> get bufferedPositionStream => _player.bufferedPositionStream; // Meaningless now?
-  
   // Return cached duration or source duration
   Duration? get duration => _source?.sourceDuration; // _player.duration;
   
@@ -115,6 +112,16 @@ class AudioManager {
       _tracks.clear();
       
       final liveMixer = LiveMixer();
+      if (kIsWeb) {
+          // Dynamic invocation of the Future initialization just on Web
+          // This avoids the type checker throwing an error on Native where init() doesn't exist.
+          try {
+             await (liveMixer as dynamic).init();
+          } catch (e) {
+             print("Web Initialization Error: $e");
+          }
+      }
+      
       List<TrackModel> loadedTracks = [];
       
       int maxSamples = 0;
@@ -129,28 +136,30 @@ class AudioManager {
         File? tempFile;
         File? ffmpegOutputFile;
         
-        // Extract asset to temp file if necessary
-        if (path.startsWith('assets/')) {
+        // Extract asset to temp file if necessary (Native only)
+        if (!kIsWeb && path.startsWith('assets/')) {
              try {
                  final data = await rootBundle.load(path);
                  final tempDir = await getTemporaryDirectory();
                  final ext = path.split('.').last;
                  tempFile = File('${tempDir.path}/temp_${id}_${DateTime.now().millisecondsSinceEpoch}.$ext');
                  await tempFile.writeAsBytes(data.buffer.asUint8List());
-                 physicalPath = tempFile.path;
+                 physicalPath = tempFile.absolute.path;
                  print("NativeAudioEngine: Wrote asset to temporary file: $physicalPath");
              } catch (e) {
-                 print("NativeAudioEngine warning: Failed to load asset $path. Skipping track.");
+                 print("NativeAudioEngine warning: Failed to load asset $path. Skipping track. Error: $e");
                  continue;
              }
         }
         
-        // Check file exists
-        if (!File(physicalPath).existsSync()) {
-           throw Exception("Native decoder error: Temp file does not exist at $physicalPath");
+        // Check file exists (Native only)
+        if (!kIsWeb && !File(physicalPath).existsSync()) {
+           print("Native decoder error: File does not exist at $physicalPath");
+           if (tempFile != null) await tempFile.delete();
+           continue;
         }
         
-        bool useFfmpeg = Platform.isAndroid || Platform.isLinux;
+        bool useFfmpeg = !kIsWeb && (Platform.isAndroid || Platform.isLinux);
         if (useFfmpeg && !physicalPath.toLowerCase().endsWith('.wav')) {
              final tempDir = await getTemporaryDirectory();
              ffmpegOutputFile = File('${tempDir.path}/decoded_${id}_${DateTime.now().millisecondsSinceEpoch}.wav');
@@ -167,18 +176,31 @@ class AudioManager {
              }
         }
         
-        // Call C++ Loader (Zero-Copy flow: C++ retains the audio internally)
-        final wavePtr = liveMixer.addTrack(id, physicalPath);
+        AudioTrackInfo? decoded;
         
-        if (wavePtr == null || wavePtr.ref.error != 0) {
-           int errorCode = wavePtr?.ref.error ?? -999;
-           if (wavePtr != null) liveMixer.freeWaveformData(wavePtr);
+        if (kIsWeb) {
+             try {
+                // Fetch bytes via HTTP or root bundle in a web-compatible way. 
+                // Currently path from assets:
+                final data = await rootBundle.load(path);
+                final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+                // Use dynamic to support async on Web while maintaining synchronous signature on Native
+                decoded = await (liveMixer as dynamic).addTrackMemory(id, bytes);
+             } catch (e) {
+                 print("NativeAudioEngine web load error: $e");
+             }
+        } else {
+            // Call C++ Loader natively
+            decoded = liveMixer.addTrack(id, physicalPath);
+        }
+        
+        if (decoded == null || decoded.error != 0) {
+           int errorCode = decoded?.error ?? -999;
            if (tempFile != null) await tempFile.delete();
            if (ffmpegOutputFile != null) await ffmpegOutputFile.delete();
            throw Exception("Miniaudio ERROR CODE: $errorCode when trying to decode $path.");
         }
         
-        final decoded = wavePtr.ref;
         final sampleCount = decoded.totalFrames * decoded.channels;
         final channels = decoded.channels;
         final sr = decoded.sampleRate;
@@ -196,12 +218,11 @@ class AudioManager {
             waveform.add(channelPeaks);
         }
         
-        // Clean up C++ Waveform Memory immediately (audio data stays in LiveMixer track registry)
-        liveMixer.freeWaveformData(wavePtr);
-        
         // Cargar audios completos y mantener RAM es INNECESARIO. Eliminamos el caché del disco.
-        if (tempFile != null) await tempFile.delete();
-        if (ffmpegOutputFile != null) await ffmpegOutputFile.delete();
+        if (!kIsWeb) {
+            if (tempFile != null) await tempFile.delete();
+            if (ffmpegOutputFile != null) await ffmpegOutputFile.delete();
+        }
 
         final track = TrackModel(
           id: id,
@@ -222,7 +243,7 @@ class AudioManager {
       
       // Calculate Latency Hint
       Duration latency = const Duration(milliseconds: 200); 
-      if (Platform.isAndroid || Platform.isIOS) {
+      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
          latency = kMobileBuffer + kHardwareLatencyEst;
       }
       
@@ -265,11 +286,20 @@ class AudioManager {
   }
   
   
-  // -- Controls --
+  // Wait for _source native play inside a try block
   Future<void> play() async {
-    _source?.playNative();
-    _startPositionTimer();
-    _playerStateController.add(PlayerState(true, ProcessingState.ready));
+    try {
+      if (kIsWeb) {
+          // Trigger resume on the native source to satisfy browser requirements
+          _source?.playNative();
+      } else {
+          _source?.playNative();
+      }
+      _startPositionTimer();
+      _playerStateController.add(PlayerState(true, ProcessingState.ready));
+    } catch (e) {
+      debugPrint("Play error: $e");
+    }
   }
   
   Future<void> pause() async {
@@ -282,7 +312,6 @@ class AudioManager {
     _source?.stopNative();
     _stopPositionTimer();
     
-    // We need to implement native seek to zero if we want reset
     _source?.seek(Duration.zero); 
     _positionController.add(Duration.zero); 
     _playerStateController.add(PlayerState(false, ProcessingState.completed));
@@ -291,7 +320,7 @@ class AudioManager {
   // Internal Timer for Polling Native Position
   void _startPositionTimer() {
     _positionTimer?.cancel();
-    // Poll faster for smoother updates (e.g. 16ms = ~60fps)
+    // Use an aggressive poll for 60fps UI sync
     _positionTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
        if (_source != null) {
           final frames = _source!.getAtomicPositionFrames();
@@ -406,14 +435,12 @@ class AudioManager {
   Duration get currentPosition {
       if (_source != null) {
           final frames = _source!.getAtomicPositionFrames();
-          // Hardware Latency Compensation would go here
-          // e.g. final latencyFrames = ...
           final sr = _source!.sampleRate;
           if (sr > 0) {
               return Duration(microseconds: (frames * 1000000 / sr).round());
           }
       }
-      return Duration.zero;
+      return _positionController.value;
   }
 
   void setTrackPan(String id, double pan) {

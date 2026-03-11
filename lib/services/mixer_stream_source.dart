@@ -357,11 +357,12 @@ class MixerStreamSource extends StreamAudioSource {
           // --- NATIVE GENERATION ---
           int inputFramesNeeded = 1024; // Smaller chunks for responsiveness
 
-          // Call Native Mixer (returns interleaved stereo)
-          List<double> mixedChunk = _liveMixer.process(inputFramesNeeded);
+          // Since the Worklet now processes audio independently, 
+          // the Dart side stream just yields silence to simulate pacing for just_audio
+          List<double> mixedChunk = List.filled(inputFramesNeeded * 2, 0.0);
 
-          // Update Linear Counter after processing (SoundTouch changes frame count)
-          localTotalFrames += mixedChunk.length ~/ _numChannels; // Should be inputFramesNeeded
+          // Update Linear Counter after processing
+          localTotalFrames += inputFramesNeeded;
 
           if (mixedChunk.isNotEmpty) {
              Uint8List outputBytes = floatToBytes(mixedChunk);
@@ -381,6 +382,10 @@ class MixerStreamSource extends StreamAudioSource {
              yield outputBytes;
              offset += outputBytes.length;
              _acceptedGeneratedBytes = offset; // Update Tracking
+             
+             // Sleep to pace the empty stream generation natively (e.g at real-time scale)
+             // 1024 frames at 44100 is ~23ms
+             await Future.delayed(Duration(milliseconds: (inputFramesNeeded * 1000 ~/ sampleRate)));
           } else {
              // processor empty?
           }

@@ -9,7 +9,7 @@
 static void createHanningWindow(std::vector<float>& window, int size) {
     window.resize(size);
     for (int i = 0; i < size; ++i) {
-        window[i] = 0.5f * (1.0f - std::cos(2.0f * M_PI * i / (size - 1)));
+        window[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * i / (size - 1)));
     }
 }
 
@@ -135,8 +135,9 @@ void Vocoder::_processChannel(int chIdx) {
     bool isTransient = (energyRatio > 2.5f);
     state.lastEnergy = currentEnergy;
     
-    float expectedPhaseAdvance = 2.0f * M_PI * _hopSizeIn / _fftSize;
-    float expectedSynthesisAdvance = 2.0f * M_PI * _hopSizeOut / _fftSize;
+    float expectedPhaseAdvance = 2.0f * (float)M_PI * _hopSizeIn / _fftSize;
+    // float expectedSynthesisAdvance = 2.0f * (float)M_PI * _hopSizeOut / _fftSize; // not used
+
     
     if (isTransient && state.transientCooldown == 0) {
         // Transient Hit: Force Phase Reset to preserve punch
@@ -161,16 +162,16 @@ void Vocoder::_processChannel(int chIdx) {
             float binDeviation = phaseDiff - (float)k * expectedPhaseAdvance;
             
             // Fast wrap to [-pi, pi]
-            while (binDeviation > M_PI) binDeviation -= 2.0f * M_PI;
-            while (binDeviation < -M_PI) binDeviation += 2.0f * M_PI;
+            while (binDeviation > (float)M_PI) binDeviation -= 2.0f * (float)M_PI;
+            while (binDeviation < -(float)M_PI) binDeviation += 2.0f * (float)M_PI;
             
             float trueFreqDev = binDeviation / _hopSizeIn; 
             
-            state.sumPhase[k] += ((float)k * 2.0f * M_PI / _fftSize + trueFreqDev) * _hopSizeOut;
+            state.sumPhase[k] += ((float)k * 2.0f * (float)M_PI / _fftSize + trueFreqDev) * _hopSizeOut;
             
             // Fast wrap synthesize phase
-            while (state.sumPhase[k] > M_PI) state.sumPhase[k] -= 2.0f * M_PI;
-            while (state.sumPhase[k] < -M_PI) state.sumPhase[k] += 2.0f * M_PI;
+            while (state.sumPhase[k] > (float)M_PI) state.sumPhase[k] -= 2.0f * (float)M_PI;
+            while (state.sumPhase[k] < -(float)M_PI) state.sumPhase[k] += 2.0f * (float)M_PI;
             
             _fftOut[k].r = state.magCache[k] * std::cos(state.sumPhase[k]);
             _fftOut[k].i = state.magCache[k] * std::sin(state.sumPhase[k]);
@@ -217,9 +218,9 @@ int Vocoder::receiveSamples(float* stereoOutput, int maxFrames) {
     std::lock_guard<std::mutex> lock(_mutex);
     
     // Find how many frames we can actually output
-    int availableFrames = _ch[0].outputBuffer.size(); 
+    int availableFrames = (int)_ch[0].outputBuffer.size(); 
     for (int c = 1; c < _channels; ++c) {
-        int avail = _ch[c].outputBuffer.size();
+        int avail = (int)_ch[c].outputBuffer.size();
         if (avail < availableFrames) availableFrames = avail;
     }
     

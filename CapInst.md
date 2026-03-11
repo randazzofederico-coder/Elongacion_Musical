@@ -110,12 +110,19 @@ Capitulo 2  ( 140bpm )
         Piano stereo
         Contrabajo mono
         Bombo mono
-    Ej 1 
-        Fl1 mono
-        Fl2 mono    
+    Ej 1a
+        Fl solista mono    
         Piano stereo
         Contrabajo mono
         Bombo mono
+    Ej 1b
+        Fl solista mono
+        (
+        Piano stereo
+        Contrabajo mono
+        Bombo mono
+        )
+        comparte piano, contrabajo y bombo con Ej 1a
      Ej 2 
         Fl solista mono    
         Piano stereo

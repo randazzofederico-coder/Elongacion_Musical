@@ -83,7 +83,15 @@ class MetronomeProvider with ChangeNotifier {
     _initEngine();
   }
 
-  void _initEngine() {
+  Future<void> _initEngine() async {
+    if (kIsWeb) {
+      try {
+        await (_liveMixer as dynamic).init();
+      } catch (e) {
+        debugPrint("MetronomeProvider Web Initialization Error: $e");
+      }
+    }
+    
     _liveMixer.setMetronomeSound(0, _generateClickSound(1000.0));
     _liveMixer.setMetronomeSound(1, _generateClickSound(600.0));
     _liveMixer.setMetronomeSound(2, _generateClickSound(800.0));

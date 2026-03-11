@@ -13,6 +13,9 @@ typedef LiveMixerDestroyDart = void Function(Pointer<Void>);
 typedef LiveMixerAddTrackC = Pointer<WaveformData> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>);
 typedef LiveMixerAddTrackDart = Pointer<WaveformData> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>);
 
+typedef LiveMixerAddTrackMemoryC = Pointer<WaveformData> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Uint8>, IntPtr);
+typedef LiveMixerAddTrackMemoryDart = Pointer<WaveformData> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Uint8>, int);
+
 typedef LiveMixerRemoveTrackC = Void Function(Pointer<Void>, Pointer<Utf8>);
 typedef LiveMixerRemoveTrackDart = void Function(Pointer<Void>, Pointer<Utf8>);
 
@@ -90,6 +93,7 @@ class LiveMixerBindings {
   late LiveMixerCreateDart _create;
   late LiveMixerDestroyDart _destroy;
   late LiveMixerAddTrackDart _addTrack;
+  late LiveMixerAddTrackMemoryDart _addTrackMemory;
   late LiveMixerRemoveTrackDart _removeTrack;
   late LiveMixerSetVolumeDart _setVolume;
   late LiveMixerSetMasterVolumeDart _setMasterVolume;
@@ -125,6 +129,7 @@ class LiveMixerBindings {
       _create = _lib.lookupFunction<LiveMixerCreateC, LiveMixerCreateDart>('live_mixer_create');
       _destroy = _lib.lookupFunction<LiveMixerDestroyC, LiveMixerDestroyDart>('live_mixer_destroy');
       _addTrack = _lib.lookupFunction<LiveMixerAddTrackC, LiveMixerAddTrackDart>('live_mixer_add_track');
+      _addTrackMemory = _lib.lookupFunction<LiveMixerAddTrackMemoryC, LiveMixerAddTrackMemoryDart>('live_mixer_add_track_memory');
       _removeTrack = _lib.lookupFunction<LiveMixerRemoveTrackC, LiveMixerRemoveTrackDart>('live_mixer_remove_track');
       _setVolume = _lib.lookupFunction<LiveMixerSetVolumeC, LiveMixerSetVolumeDart>('live_mixer_set_volume');
       _setMasterVolume = _lib.lookupFunction<LiveMixerSetMasterVolumeC, LiveMixerSetMasterVolumeDart>('live_mixer_set_master_volume');
@@ -154,6 +159,21 @@ class LiveMixerBindings {
       final result = _addTrack(mixer, idPtr, pathPtr);
       
       calloc.free(pathPtr);
+      calloc.free(idPtr);
+      return result;
+  }
+
+  Pointer<WaveformData> addTrackMemory(Pointer<Void> mixer, String id, Uint8List data) {
+      final idPtr = id.toNativeUtf8();
+      
+      // Allocate memory for the data
+      final dataPtr = calloc<Uint8>(data.length);
+      final dataList = dataPtr.asTypedList(data.length);
+      dataList.setAll(0, data);
+      
+      final result = _addTrackMemory(mixer, idPtr, dataPtr, data.length);
+      
+      calloc.free(dataPtr);
       calloc.free(idPtr);
       return result;
   }

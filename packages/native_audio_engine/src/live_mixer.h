@@ -33,6 +33,8 @@ public:
     };
     
     WaveformData* addTrack(const char* id, const char* filePath);
+    WaveformData* addTrackMemory(const char* id, const void* data, size_t dataSize);
+    WaveformData* addTrackPCM(const char* id, const float* pcmData, int totalFrames, int channels, int sampleRate);
     void removeTrack(const char* id);
     void setTrackVolume(const char* id, float volume);
     void setTrackPan(const char* id, float pan);
@@ -179,6 +181,7 @@ extern "C" {
 
     // --- ZERO-COPY AND DECODER ---
     EXPORT LiveMixer::WaveformData* live_mixer_add_track(void* mixer, const char* id, const char* filePath);
+    EXPORT LiveMixer::WaveformData* live_mixer_add_track_memory(void* mixer, const char* id, const void* data, size_t dataSize);
     EXPORT void live_mixer_free_waveform_data(LiveMixer::WaveformData* data);
     
     EXPORT int live_mixer_render_offline(void* mixer, const char* outPath);
