@@ -181,14 +181,14 @@ class LiveMixer {
      _bindings.setMetronomeSound(_handle, type, data);
   }
 
-  void addMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+  void addMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, List<double>? durationRatios, double vol, bool mute, bool solo) {
       if (_isDisposed) return;
-      _bindings.addMetronomePattern(_handle, id, flatPattern, subdivisions, vol, mute, solo);
+      _bindings.addMetronomePattern(_handle, id, flatPattern, subdivisions, durationRatios, vol, mute, solo);
   }
 
-  void updateMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+  void updateMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, List<double>? durationRatios, double vol, bool mute, bool solo) {
       if (_isDisposed) return;
-      _bindings.updateMetronomePattern(_handle, id, flatPattern, subdivisions, vol, mute, solo);
+      _bindings.updateMetronomePattern(_handle, id, flatPattern, subdivisions, durationRatios, vol, mute, solo);
   }
 
   void removeMetronomePattern(int id) {

@@ -6,7 +6,8 @@ import 'package:native_audio_engine/live_mixer.dart';
 
 class HomeMetronomePulse {
   List<int> subdivisions;
-  HomeMetronomePulse([List<int>? subdivisions]) : subdivisions = subdivisions ?? [0];
+  double durationRatio;
+  HomeMetronomePulse([List<int>? subdivisions, this.durationRatio = 1.0]) : subdivisions = subdivisions ?? [0];
 }
 
 class HomeMetronomeInstance {
@@ -36,27 +37,47 @@ class HomeMetronomeInstance {
       final List<HomeMetronomePulse> newPulses = [];
       for (String part in parts) {
           int count = 1;
+          int ratio = 0;  // 0 means "not specified" => default to count
           int subdivision = 1;
           
-          if (part.contains('/')) {
-              final subParts = part.split('/');
+          String remainder = part;
+          
+          // Parse optional :ratio
+          if (remainder.contains(':')) {
+              final ratioParts = remainder.split(':');
+              count = int.tryParse(ratioParts[0]) ?? 1;
+              remainder = ratioParts.length > 1 ? ratioParts[1] : '';
+              // remainder might be "2" or "2/6"
+              if (remainder.contains('/')) {
+                  final subParts = remainder.split('/');
+                  ratio = int.tryParse(subParts[0]) ?? count;
+                  subdivision = int.tryParse(subParts[1]) ?? 1;
+              } else {
+                  ratio = int.tryParse(remainder) ?? count;
+              }
+          } else if (remainder.contains('/')) {
+              final subParts = remainder.split('/');
               count = int.tryParse(subParts[0]) ?? 1;
               if (subParts.length > 1) subdivision = int.tryParse(subParts[1]) ?? 1;
           } else {
-              count = int.tryParse(part) ?? 1;
+              count = int.tryParse(remainder) ?? 1;
           }
           
           if (count <= 0) count = 1;
           if (subdivision <= 0) subdivision = 1;
           
+          // durationRatio per pulse: if ratio specified, each pulse = ratio/count beats
+          // otherwise each pulse = 1 beat
+          double pulseDuration = (ratio > 0) ? ratio / count : 1.0;
+          
           for (int i = 0; i < count; i++) {
-              List<int> subdivList = List.generate(subdivision, (s) => 3); // Subdivisions are 3
+              List<int> subdivList = List.generate(subdivision, (s) => 3);
               if (i == 0) {
                   subdivList[0] = 1; // Primary pulse head
               } else {
                   subdivList[0] = 2; // Secondary pulse head
               }
-              newPulses.add(HomeMetronomePulse(subdivList));
+              newPulses.add(HomeMetronomePulse(subdivList, pulseDuration));
           }
       }
       return newPulses;
@@ -99,9 +120,26 @@ class MetronomeProvider with ChangeNotifier {
     _liveMixer.setMasterVolume(1.0);
     _liveMixer.setMetronomePreviewMode(true); // Always isolated preview mode
     
-    // Add defaults
-    addInstance(title: "Patrón 1", structure: "4");
-    addInstance(title: "Patrón 2", structure: "3+2");
+    // Add defaults: Birritmia (3/4 vs 6/8)
+    // Patrón 1: 3/2 — 3 pulses, each subdivided in 2 = [0,0, 2,0, 2,0]
+    addInstance(
+      title: "3/4",
+      structure: "3/2",
+      pulses: [
+        HomeMetronomePulse([0, 0]),  // Beat 1: silent
+        HomeMetronomePulse([2, 0]),  // Beat 2: secondary accent + silent
+        HomeMetronomePulse([2, 0]),  // Beat 3: secondary accent + silent
+      ],
+    );
+    // Patrón 2: 2:3/3 — 2 pulses in time of 3, each subdivided in 3 = [1,0,0, 1,0,0]
+    addInstance(
+      title: "6/8",
+      structure: "2:3/3",
+      pulses: [
+        HomeMetronomePulse([1, 0, 0], 1.5),  // Beat 1: primary accent + 2 silent (spans 1.5 beats)
+        HomeMetronomePulse([1, 0, 0], 1.5),  // Beat 2: primary accent + 2 silent (spans 1.5 beats)
+      ],
+    );
   }
   
   void addInstance({required String title, String structure = "4", List<HomeMetronomePulse>? pulses}) {
@@ -110,15 +148,18 @@ class MetronomeProvider with ChangeNotifier {
     
     final flatPattern = <int>[];
     final subdivisions = <int>[];
+    final durationRatios = <double>[];
     for (var pulse in instance.pulses) {
         subdivisions.add(pulse.subdivisions.length);
         flatPattern.addAll(pulse.subdivisions);
+        durationRatios.add(pulse.durationRatio);
     }
     
     _liveMixer.addMetronomePattern(
         instance.id, 
         flatPattern,
         subdivisions,
+        durationRatios,
         instance.volume, 
         instance.isMuted, 
         instance.isSolo
@@ -164,27 +205,44 @@ class MetronomeProvider with ChangeNotifier {
 
       for (String part in parts) {
           int count = 1;
+          int ratio = 0;
           int subdivision = 1;
           
-          if (part.contains('/')) {
-              final subParts = part.split('/');
+          String remainder = part;
+          
+          // Parse optional :ratio
+          if (remainder.contains(':')) {
+              final ratioParts = remainder.split(':');
+              count = int.tryParse(ratioParts[0]) ?? 1;
+              remainder = ratioParts.length > 1 ? ratioParts[1] : '';
+              if (remainder.contains('/')) {
+                  final subParts = remainder.split('/');
+                  ratio = int.tryParse(subParts[0]) ?? count;
+                  subdivision = int.tryParse(subParts[1]) ?? 1;
+              } else {
+                  ratio = int.tryParse(remainder) ?? count;
+              }
+          } else if (remainder.contains('/')) {
+              final subParts = remainder.split('/');
               count = int.tryParse(subParts[0]) ?? 1;
               if (subParts.length > 1) subdivision = int.tryParse(subParts[1]) ?? 1;
           } else {
-              count = int.tryParse(part) ?? 1;
+              count = int.tryParse(remainder) ?? 1;
           }
           
           if (count <= 0) count = 1;
           if (subdivision <= 0) subdivision = 1;
 
+          double pulseDuration = (ratio > 0) ? ratio / count : 1.0;
+
           for (int i = 0; i < count; i++) {
-              List<int> subdivList = List.generate(subdivision, (s) => 3); // Subdivisions are 3
+              List<int> subdivList = List.generate(subdivision, (s) => 3);
               if (i == 0) {
-                  subdivList[0] = 1; // Primary pulse head
+                  subdivList[0] = 1;
               } else {
-                  subdivList[0] = 2; // Secondary pulse head
+                  subdivList[0] = 2;
               }
-              newPulses.add(HomeMetronomePulse(subdivList));
+              newPulses.add(HomeMetronomePulse(subdivList, pulseDuration));
           }
       }
 
@@ -219,15 +277,18 @@ class MetronomeProvider with ChangeNotifier {
   void _syncInstanceToEngine(HomeMetronomeInstance instance) {
       final flatPattern = <int>[];
       final subdivisions = <int>[];
+      final durationRatios = <double>[];
       for (var pulse in instance.pulses) {
           subdivisions.add(pulse.subdivisions.length);
           flatPattern.addAll(pulse.subdivisions);
+          durationRatios.add(pulse.durationRatio);
       }
       
       _liveMixer.updateMetronomePattern(
          instance.id, 
          flatPattern, 
          subdivisions,
+         durationRatios,
          instance.volume, 
          instance.isMuted, 
          instance.isSolo
@@ -319,9 +380,19 @@ class MetronomeProvider with ChangeNotifier {
     return ((a * b) / _gcd(a, b)).floor();
   }
 
+  double _cycleDurationBeats(HomeMetronomeInstance instance) {
+    double sum = 0.0;
+    for (var pulse in instance.pulses) {
+      sum += pulse.durationRatio;
+    }
+    return sum > 0 ? sum : 1.0;
+  }
+
   int get macroCycleBeats {
     if (_instances.isEmpty) return 4;
-    return _instances.map((i) => i.pulses.length).fold(_instances.first.pulses.length, (a, b) => _lcm(a, b));
+    // Cycle duration per instance is always integer (sum of ratio values from parser)
+    List<int> cycleLengths = _instances.map((i) => _cycleDurationBeats(i).round()).toList();
+    return cycleLengths.fold(cycleLengths.first, (a, b) => _lcm(a, b));
   }
 
   double get currentMacroProgress {

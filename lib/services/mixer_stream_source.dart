@@ -52,8 +52,8 @@ class MixerStreamSource extends StreamAudioSource {
       _liveMixer.setMasterVolume(getMasterVolume());
       
       // Initialize the default 3/4 and 6/8 patterns in the native engine
-      _liveMixer.addMetronomePattern(1, null, null, 0.0, false, false);
-      _liveMixer.addMetronomePattern(2, null, null, 0.0, false, false);
+      _liveMixer.addMetronomePattern(1, null, null, null, 0.0, false, false);
+      _liveMixer.addMetronomePattern(2, null, null, null, 0.0, false, false);
   }
   
   void setTempo(double tempo) {
@@ -108,8 +108,8 @@ class MixerStreamSource extends StreamAudioSource {
   bool _solo34 = false;
   bool _solo68 = false;
 
-  void _pushMetronome34() => _liveMixer.updateMetronomePattern(1, _pattern34, const [2, 2, 2], _vol34, _mute34, _solo34);
-  void _pushMetronome68() => _liveMixer.updateMetronomePattern(2, _pattern68, const [2, 2, 2], _vol68, _mute68, _solo68);
+  void _pushMetronome34() => _liveMixer.updateMetronomePattern(1, _pattern34, const [2, 2, 2], null, _vol34, _mute34, _solo34);
+  void _pushMetronome68() => _liveMixer.updateMetronomePattern(2, _pattern68, const [2, 2, 2], null, _vol68, _mute68, _solo68);
 
   void setMetronomeConfig(int bpm) => _liveMixer.setMetronomeConfig(bpm);
   void setMetronomeSound(int type, Float32List data) => _liveMixer.setMetronomeSound(type, data);

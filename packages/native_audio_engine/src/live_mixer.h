@@ -62,8 +62,8 @@ public:
     void setMetronomeSound(int type, const float* data, int numSamples);
     void setMetronomeVolume(float vol34, float vol68); // keeping for backward compat if needed, or remove? Let's remove
     // New dynamic metronome API
-    void addMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo);
-    void updateMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo);
+    void addMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, const double* durationRatios, int numPulses, float vol, bool mute, bool solo);
+    void updateMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, const double* durationRatios, int numPulses, float vol, bool mute, bool solo);
     void removeMetronomePattern(int id);
     void clearMetronomePatterns();
     void setMetronomePreviewMode(bool enabled);
@@ -112,6 +112,7 @@ private:
 
    struct MetronomePulse {
        std::vector<int> subdivisions;
+       double durationRatio = 1.0;
    };
 
    struct MetronomeTrack {
@@ -124,7 +125,7 @@ private:
    std::vector<MetronomeTrack> _metronomeTracks;
 
    // Track parsing helper for flat FFI arrays
-   void _parseFlatPattern(MetronomeTrack& track, const int* flatData, const int* subdivisions, int numPulses);
+   void _parseFlatPattern(MetronomeTrack& track, const int* flatData, const int* subdivisions, const double* durationRatios, int numPulses);
 
    struct MetronomeVoice {
        std::vector<float> data;
@@ -173,8 +174,8 @@ extern "C" {
 
     EXPORT void live_mixer_set_metronome_config(void* mixer, int bpm);
     EXPORT void live_mixer_set_metronome_sound(void* mixer, int type, const float* data, int numSamples);
-    EXPORT void live_mixer_add_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo);
-    EXPORT void live_mixer_update_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo);
+    EXPORT void live_mixer_add_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, const double* durationRatios, int numPulses, float vol, bool mute, bool solo);
+    EXPORT void live_mixer_update_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, const double* durationRatios, int numPulses, float vol, bool mute, bool solo);
     EXPORT void live_mixer_remove_metronome_pattern(void* mixer, int id);
     EXPORT void live_mixer_clear_metronome_patterns(void* mixer);
     EXPORT void live_mixer_set_metronome_preview_mode(void* mixer, bool enabled);

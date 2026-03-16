@@ -71,84 +71,90 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
           },
           child: Consumer<MetronomeProvider>(
             builder: (context, metronome, child) {
-              return Stack(
+              return Column(
                 children: [
-                  ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                    children: [
-                      _buildGlobalControls(context, metronome),
-                const SizedBox(height: 16),
-                _MacroCycleVisualizer(metronome: metronome),
-                const SizedBox(height: 8),
-                
-                // Dynamic Instances
-                ...metronome.instances.map((instance) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: _buildMetronomeInstance(
-                      context: context,
-                      instance: instance,
-                      onStructureChange: (newStructure) => metronome.updateInstanceStructure(instance.id, newStructure),
-                      onPulseSubdivisionChange: (pulseIndex, subIndex, newType) {
-                          final newPulses = List<HomeMetronomePulse>.from(instance.pulses);
-                          newPulses[pulseIndex].subdivisions[subIndex] = newType;
-                          metronome.updateInstancePulses(instance.id, newPulses);
-                      },
-                      onVolChanged: (val) => metronome.updateInstanceVolume(instance.id, val),
-                      onMuteToggle: () => metronome.toggleInstanceMute(instance.id),
-                      onSoloToggle: () => metronome.toggleInstanceSolo(instance.id),
-                      onRemove: () => metronome.removeInstance(instance.id),
-                    ),
-                  );
-                }).toList(),
-                
-                      // Add Pattern Button
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          metronome.addInstance(title: "Patrón ${metronome.instances.length + 1}");
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text("AÑADIR PATRÓN"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.surfaceHighlight(context),
-                          foregroundColor: AppColors.textPrimary(context),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: BorderSide(color: AppColors.border(context)),
-                          ),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        ListView(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                          children: [
+                            _MacroCycleVisualizer(metronome: metronome),
+                            const SizedBox(height: 8),
+                            
+                            // Dynamic Instances
+                            ...metronome.instances.map((instance) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 24),
+                                child: _buildMetronomeInstance(
+                                  context: context,
+                                  instance: instance,
+                                  onStructureChange: (newStructure) => metronome.updateInstanceStructure(instance.id, newStructure),
+                                  onPulseSubdivisionChange: (pulseIndex, subIndex, newType) {
+                                      final newPulses = List<HomeMetronomePulse>.from(instance.pulses);
+                                      newPulses[pulseIndex].subdivisions[subIndex] = newType;
+                                      metronome.updateInstancePulses(instance.id, newPulses);
+                                  },
+                                  onVolChanged: (val) => metronome.updateInstanceVolume(instance.id, val),
+                                  onMuteToggle: () => metronome.toggleInstanceMute(instance.id),
+                                  onSoloToggle: () => metronome.toggleInstanceSolo(instance.id),
+                                  onRemove: () => metronome.removeInstance(instance.id),
+                                ),
+                              );
+                            }).toList(),
+                            
+                            // Add Pattern Button
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                metronome.addInstance(title: "Patrón ${metronome.instances.length + 1}");
+                              },
+                              icon: const Icon(Icons.add),
+                              label: const Text("AÑADIR PATRÓN"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.surfaceHighlight(context),
+                                foregroundColor: AppColors.textPrimary(context),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  side: BorderSide(color: AppColors.border(context)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 250), // Pad bottom for keyboard
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 250), // Pad bottom for keyboard
-                    ],
-                  ),
-                  
-                  // Custom Keyboard Overlay
-                  if (_activePatternIdForKeyboard != null)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: _buildCustomKeyboard(
-                         context: context,
-                         instanceId: _activePatternIdForKeyboard!,
-                         controller: _structureControllers[_activePatternIdForKeyboard!]!,
-                         onSubmit: (val) {
-                             metronome.updateInstanceStructure(_activePatternIdForKeyboard!, val);
-                             setState(() {
-                                 _activePatternIdForKeyboard = null;
-                             });
-                         },
-                         onUpdateLive: (val) {
-                             // Force local UI redraw so the user sees the '+' immediately
-                             setState(() {});
-                             
-                             if (val.isNotEmpty && !val.endsWith('+')) { 
-                                 metronome.updateInstanceStructure(_activePatternIdForKeyboard!, val);
-                             }
-                         }
-                      ),
+                        
+                        // Custom Keyboard Overlay
+                        if (_activePatternIdForKeyboard != null)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: _buildCustomKeyboard(
+                               context: context,
+                               instanceId: _activePatternIdForKeyboard!,
+                               controller: _structureControllers[_activePatternIdForKeyboard!]!,
+                               onSubmit: (val) {
+                                   metronome.updateInstanceStructure(_activePatternIdForKeyboard!, val);
+                                   setState(() {
+                                       _activePatternIdForKeyboard = null;
+                                   });
+                               },
+                               onUpdateLive: (val) {
+                                   // Force local UI redraw so the user sees the '+' immediately
+                                   setState(() {});
+                                   
+                                   if (val.isNotEmpty && !val.endsWith('+')) { 
+                                       metronome.updateInstanceStructure(_activePatternIdForKeyboard!, val);
+                                   }
+                               }
+                            ),
+                          ),
+                      ],
                     ),
+                  ),
+                  // Fixed bottom controls bar
+                  _buildGlobalControls(context, metronome),
                 ],
               );
             },
@@ -163,15 +169,15 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
     final currentBpm = metronome.bpm;
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.surface(context),
-        borderRadius: BorderRadius.circular(16),
+        border: Border(top: BorderSide(color: AppColors.border(context))),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, -4),
           )
         ]
       ),
@@ -182,8 +188,8 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
           GestureDetector(
             onTap: () => metronome.togglePlay(),
             child: Container(
-              height: 64,
-              width: 64,
+              height: 48,
+              width: 48,
               decoration: BoxDecoration(
                 color: isPlaying ? AppColors.accentRed(context) : AppColors.accentCyan(context),
                 shape: BoxShape.circle,
@@ -198,7 +204,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
               child: Icon(
                 isPlaying ? Icons.stop : Icons.play_arrow,
                 color: Colors.white,
-                size: 36,
+                size: 28,
               ),
             ),
           ),
@@ -207,27 +213,38 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
           Expanded(
             child: Column(
               children: [
-                 Text(
-                  "TEMPO",
-                  style: TextStyle(
-                    color: AppColors.textSecondary(context),
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                       IconButton(
-                         icon: Icon(Icons.keyboard_double_arrow_left, color: AppColors.textSecondary(context)),
-                         onPressed: () => metronome.updateBPM(currentBpm - 5),
+                       GestureDetector(
+                         onTap: () => metronome.updateBPM(currentBpm - 5),
+                         child: Container(
+                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                           child: Text(
+                             "-5",
+                             style: TextStyle(
+                               color: AppColors.textSecondary(context),
+                               fontSize: 16,
+                               fontWeight: FontWeight.bold,
+                             ),
+                           ),
+                         ),
                        ),
-                       IconButton(
-                         icon: Icon(Icons.remove_circle_outline, color: AppColors.textSecondary(context)),
-                         onPressed: () => metronome.updateBPM(currentBpm - 1),
+                       GestureDetector(
+                         onTap: () => metronome.updateBPM(currentBpm - 1),
+                         child: Container(
+                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                           child: Text(
+                             "-1",
+                             style: TextStyle(
+                               color: AppColors.textSecondary(context),
+                               fontSize: 16,
+                               fontWeight: FontWeight.bold,
+                             ),
+                           ),
+                         ),
                        ),
                        Container(
                          width: 80,
@@ -241,13 +258,33 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
                            ),
                          ),
                        ),
-                       IconButton(
-                         icon: Icon(Icons.add_circle_outline, color: AppColors.textSecondary(context)),
-                         onPressed: () => metronome.updateBPM(currentBpm + 1),
+                       GestureDetector(
+                         onTap: () => metronome.updateBPM(currentBpm + 1),
+                         child: Container(
+                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                           child: Text(
+                             "+1",
+                             style: TextStyle(
+                               color: AppColors.textSecondary(context),
+                               fontSize: 16,
+                               fontWeight: FontWeight.bold,
+                             ),
+                           ),
+                         ),
                        ),
-                       IconButton(
-                         icon: Icon(Icons.keyboard_double_arrow_right, color: AppColors.textSecondary(context)),
-                         onPressed: () => metronome.updateBPM(currentBpm + 5),
+                       GestureDetector(
+                         onTap: () => metronome.updateBPM(currentBpm + 5),
+                         child: Container(
+                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                           child: Text(
+                             "+5",
+                             style: TextStyle(
+                               color: AppColors.textSecondary(context),
+                               fontSize: 16,
+                               fontWeight: FontWeight.bold,
+                             ),
+                           ),
+                         ),
                        ),
                     ],
                   ),
@@ -278,24 +315,24 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
           GestureDetector(
             onTap: () => metronome.tapTempo(),
             child: Container(
-              height: 64,
-              width: 64,
+              height: 48,
+              width: 48,
               decoration: BoxDecoration(
                 color: AppColors.surfaceHighlight(context),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.border(context), width: 2),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                   Icon(Icons.touch_app, color: AppColors.textPrimary(context), size: 24),
-                   const SizedBox(height: 2),
+                   Icon(Icons.touch_app, color: AppColors.textPrimary(context), size: 20),
+                   const SizedBox(height: 1),
                    Text(
                      "TAP",
                      style: TextStyle(
                        color: AppColors.textPrimary(context),
                        fontWeight: FontWeight.bold,
-                       fontSize: 10,
+                       fontSize: 8,
                        letterSpacing: 1.0,
                      ),
                    )
@@ -422,7 +459,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
                  flex: 2,
                  child: Text(instance.title, style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, letterSpacing: 1.5), overflow: TextOverflow.ellipsis),
                ),
-               // Grouping Text Field (Custom Touch Target)
+               // Grouping Text Field / Formatted Structure Display
                Expanded(
                  flex: 3,
                  child: GestureDetector(
@@ -432,30 +469,27 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
                        });
                    },
                    child: Container(
-                     height: 36,
-                     padding: const EdgeInsets.symmetric(horizontal: 12),
+                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                      decoration: BoxDecoration(
                          color: AppColors.background(context).withOpacity(0.5),
                          border: Border.all(color: isEditing ? AppColors.accentCyan(context) : AppColors.border(context).withOpacity(0.5)),
                          borderRadius: BorderRadius.circular(4),
                      ),
-                     child: Row(
-                         children: [
-                             Icon(Icons.edit_note, color: isEditing ? AppColors.accentCyan(context) : AppColors.textSecondary(context), size: 18),
-                             const SizedBox(width: 8),
-                             Expanded(
+                     child: isEditing 
+                       ? SizedBox(
+                           height: 24,
+                           child: Row(
+                             children: [
+                               Icon(Icons.edit_note, color: AppColors.accentCyan(context), size: 18),
+                               const SizedBox(width: 8),
+                               Expanded(
                                  child: TextField(
                                      controller: _structureControllers[instance.id],
                                      readOnly: true,
-                                     showCursor: isEditing,
+                                     showCursor: true,
                                      cursorColor: AppColors.accentCyan(context),
-                                     onTap: () {
-                                         setState(() {
-                                             _activePatternIdForKeyboard = instance.id;
-                                         });
-                                     },
                                      style: TextStyle(
-                                         color: isEditing ? AppColors.accentCyan(context) : AppColors.textPrimary(context),
+                                         color: AppColors.accentCyan(context),
                                          fontWeight: FontWeight.bold,
                                          fontSize: 16,
                                          letterSpacing: 2.0,
@@ -470,9 +504,11 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
                                          )
                                      ),
                                  ),
-                             ),
-                         ],
-                     ),
+                               ),
+                             ],
+                           ),
+                         )
+                       : _buildFormattedStructure(context, instance.structure),
                    ),
                  ),
                ),
@@ -520,6 +556,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
                      
                      cellWidgets.add(
                        Expanded(
+                         flex: (pulse.durationRatio * 100).round().clamp(1, 10000),
                          child: Container(
                            margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
                            height: rows == 1 ? 55 : 45, // Container total height
@@ -640,6 +677,75 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
   }
 
   // --- CUSTOM KEYBOARD ---
+  /// Builds a formatted structure display where subdivision appears below a divider.
+  /// e.g. "2/3" → "2" over "―" over "3"
+  /// e.g. "2:3/3" → "2:3" over "―" over "3"
+  /// e.g. "3+2" → "3" + "2" (no subdivisions, no divider)
+  Widget _buildFormattedStructure(BuildContext context, String structure) {
+    final String cleaned = structure.replaceAll(' ', '');
+    if (cleaned.isEmpty) {
+      return Text("—", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14));
+    }
+
+    final List<String> segments = cleaned.split('+');
+    final List<Widget> segmentWidgets = [];
+
+    for (int s = 0; s < segments.length; s++) {
+      if (s > 0) {
+        segmentWidgets.add(Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text("+", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14, fontWeight: FontWeight.bold)),
+        ));
+      }
+
+      final String seg = segments[s];
+      String topPart;
+      String? bottomPart;
+
+      if (seg.contains('/')) {
+        final slashIdx = seg.indexOf('/');
+        topPart = seg.substring(0, slashIdx);
+        bottomPart = seg.substring(slashIdx + 1);
+      } else {
+        topPart = seg;
+      }
+
+      if (bottomPart != null) {
+        // Fraction-style: top / divider / bottom
+        final textColor = AppColors.textPrimary(context);
+        final topWidth = topPart.length * 10.0 + 8;
+        final bottomWidth = bottomPart.length * 10.0 + 8;
+        final width = (topWidth > bottomWidth ? topWidth : bottomWidth).clamp(24.0, 120.0);
+
+        segmentWidgets.add(SizedBox(
+          width: width,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(topPart, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1)),
+              Container(
+                width: width - 4,
+                height: 1,
+                color: AppColors.textSecondary(context).withOpacity(0.5),
+                margin: const EdgeInsets.symmetric(vertical: 1),
+              ),
+              Text(bottomPart, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1)),
+            ],
+          ),
+        ));
+      } else {
+        // Simple number, no subdivision
+        segmentWidgets.add(Text(topPart, style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1)));
+      }
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: segmentWidgets,
+    );
+  }
+
   Widget _buildCustomKeyboard({
       required BuildContext context, 
       required int instanceId,
@@ -686,6 +792,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
                           Expanded(child: _buildKeyBtn("4", controller, onUpdateLive)),
                           Expanded(child: _buildKeyBtn("5", controller, onUpdateLive)),
                           Expanded(child: _buildKeyBtn("6", controller, onUpdateLive)),
+                          Expanded(child: _buildKeyBtn(":", controller, onUpdateLive, isControl: true, color: AppColors.accentGreen(context))),
                           Expanded(child: _buildKeyBtn("/", controller, onUpdateLive, isControl: true, color: AppColors.accentGreen(context))),
                       ],
                   ),
@@ -867,53 +974,68 @@ class _MacroCycleVisualizerState extends State<_MacroCycleVisualizer> with Singl
                 children: [
                   // Matrix of cells — only rebuilds when instances/structure changes
                   Column(
-                    children: widget.metronome.instances.map((instance) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        height: 16,
-                        child: Row(
-                          children: List.generate(macroBeats, (index) {
-                            int originalIndex = index % instance.pulses.length;
-                            final pulse = instance.pulses[originalIndex];
-                            
-                            return Expanded(
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 1),
-                                child: Row(
-                                   crossAxisAlignment: CrossAxisAlignment.end,
-                                   children: List.generate(pulse.subdivisions.length, (subIndex) {
-                                       int type = pulse.subdivisions[subIndex];
-                                       bool isHead = subIndex == 0;
-                                       
-                                       Color color = type == 0 
-                                          ? AppColors.background(context) 
-                                          : _getColorForTypeLocal(context, type);
-                                          
-                                       return Expanded(
-                                          child: Container(
-                                              margin: EdgeInsets.only(top: isHead ? 0 : 3),
-                                              decoration: BoxDecoration(
-                                                  color: type == 0 ? color : color.withOpacity(0.4),
-                                                  border: Border(
-                                                      right: subIndex < pulse.subdivisions.length - 1
-                                                          ? BorderSide(color: AppColors.background(context), width: 1.0)
-                                                          : BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1),
-                                                      top: isHead ? BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1) : BorderSide(color: Colors.transparent, width: 1),
-                                                      bottom: BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1),
-                                                      left: isHead ? BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1) : BorderSide(color: Colors.transparent, width: 1),
-                                                  ),
-                                              ),
-                                          ),
-                                       );
+                     children: widget.metronome.instances.map((instance) {
+                       // Compute how many times this instance's pattern repeats within macroBeats
+                       double cycleDuration = 0.0;
+                       for (var p in instance.pulses) {
+                         cycleDuration += p.durationRatio;
+                       }
+                       if (cycleDuration <= 0) cycleDuration = instance.pulses.length.toDouble();
+                       int repeats = (macroBeats / cycleDuration).round().clamp(1, 100);
+                       
+                       // Build cells: repeat the pattern
+                       List<Widget> cells = [];
+                       for (int r = 0; r < repeats; r++) {
+                         for (int pi = 0; pi < instance.pulses.length; pi++) {
+                           final pulse = instance.pulses[pi];
+                           int flexValue = (pulse.durationRatio * 100).round().clamp(1, 10000);
+                           
+                           cells.add(
+                             Expanded(
+                               flex: flexValue,
+                               child: Container(
+                                 margin: const EdgeInsets.symmetric(horizontal: 1),
+                                 child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: List.generate(pulse.subdivisions.length, (subIndex) {
+                                        int type = pulse.subdivisions[subIndex];
+                                        bool isHead = subIndex == 0;
+                                        
+                                        Color color = type == 0 
+                                           ? AppColors.background(context) 
+                                           : _getColorForTypeLocal(context, type);
+                                           
+                                        return Expanded(
+                                           child: Container(
+                                               margin: EdgeInsets.only(top: isHead ? 0 : 3),
+                                               decoration: BoxDecoration(
+                                                   color: type == 0 ? color : color.withOpacity(0.4),
+                                                   border: Border(
+                                                       right: subIndex < pulse.subdivisions.length - 1
+                                                           ? BorderSide(color: AppColors.background(context), width: 1.0)
+                                                           : BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1),
+                                                       top: isHead ? BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1) : BorderSide(color: Colors.transparent, width: 1),
+                                                       bottom: BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1),
+                                                       left: isHead ? BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1) : BorderSide(color: Colors.transparent, width: 1),
+                                                   ),
+                                               ),
+                                           ),
+                                        );
                                    }),
-                                ),
-                              ),
-                            );
-                          }),
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                                 ),
+                               ),
+                             ),
+                           );
+                         }
+                       }
+                       
+                       return Container(
+                         margin: const EdgeInsets.only(bottom: 6),
+                         height: 16,
+                         child: Row(children: cells),
+                       );
+                     }).toList(),
+                   ),
                   
                   // Playhead — ONLY this rebuilds at 60fps via ValueNotifier
                   ValueListenableBuilder<double>(

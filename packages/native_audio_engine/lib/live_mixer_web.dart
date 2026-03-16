@@ -386,26 +386,28 @@ class LiveMixer {
      _postCmd(msg);
   }
 
-  void addMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+  void addMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, List<double>? durationRatios, double vol, bool mute, bool solo) {
      if (_isDisposed || !isReady) return;
      final msg = JSObject();
      msg.setProperty('cmd'.toJS, 'addMetronomePattern'.toJS);
      msg.setProperty('id'.toJS, id.toJS);
      if (flatPattern != null) msg.setProperty('flatPattern'.toJS, Int32List.fromList(flatPattern).toJS);
      if (subdivisions != null) msg.setProperty('subdivisions'.toJS, Int32List.fromList(subdivisions).toJS);
+     if (durationRatios != null) msg.setProperty('durationRatios'.toJS, Float64List.fromList(durationRatios).toJS);
      msg.setProperty('vol'.toJS, vol.toJS);
      msg.setProperty('mute'.toJS, mute.toJS);
      msg.setProperty('solo'.toJS, solo.toJS);
      _postCmd(msg);
   }
 
-  void updateMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+  void updateMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, List<double>? durationRatios, double vol, bool mute, bool solo) {
      if (_isDisposed || !isReady) return;
      final msg = JSObject();
      msg.setProperty('cmd'.toJS, 'updateMetronomePattern'.toJS);
      msg.setProperty('id'.toJS, id.toJS);
      if (flatPattern != null) msg.setProperty('flatPattern'.toJS, Int32List.fromList(flatPattern).toJS);
      if (subdivisions != null) msg.setProperty('subdivisions'.toJS, Int32List.fromList(subdivisions).toJS);
+     if (durationRatios != null) msg.setProperty('durationRatios'.toJS, Float64List.fromList(durationRatios).toJS);
      msg.setProperty('vol'.toJS, vol.toJS);
      msg.setProperty('mute'.toJS, mute.toJS);
      msg.setProperty('solo'.toJS, solo.toJS);

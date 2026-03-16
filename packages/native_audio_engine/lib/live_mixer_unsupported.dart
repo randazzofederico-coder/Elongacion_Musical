@@ -92,11 +92,11 @@ class LiveMixer {
     throw UnsupportedError('Native audio engine is not supported on this platform.');
   }
 
-  void addMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+  void addMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, List<double>? durationRatios, double vol, bool mute, bool solo) {
     throw UnsupportedError('Native audio engine is not supported on this platform.');
   }
 
-  void updateMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+  void updateMetronomePattern(int id, List<int>? flatPattern, List<int>? subdivisions, List<double>? durationRatios, double vol, bool mute, bool solo) {
     throw UnsupportedError('Native audio engine is not supported on this platform.');
   }
 

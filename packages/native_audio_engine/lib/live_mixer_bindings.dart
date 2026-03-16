@@ -59,11 +59,11 @@ typedef LiveMixerSetMetronomeConfigDart = void Function(Pointer<Void>, int);
 typedef LiveMixerSetMetronomeSoundC = Void Function(Pointer<Void>, Int32, Pointer<Float>, Int32);
 typedef LiveMixerSetMetronomeSoundDart = void Function(Pointer<Void>, int, Pointer<Float>, int);
 
-typedef LiveMixerAddMetronomePatternC = Void Function(Pointer<Void>, Int32, Pointer<Int32>, Pointer<Int32>, Int32, Float, Bool, Bool);
-typedef LiveMixerAddMetronomePatternDart = void Function(Pointer<Void>, int, Pointer<Int32>, Pointer<Int32>, int, double, bool, bool);
+typedef LiveMixerAddMetronomePatternC = Void Function(Pointer<Void>, Int32, Pointer<Int32>, Pointer<Int32>, Pointer<Double>, Int32, Float, Bool, Bool);
+typedef LiveMixerAddMetronomePatternDart = void Function(Pointer<Void>, int, Pointer<Int32>, Pointer<Int32>, Pointer<Double>, int, double, bool, bool);
 
-typedef LiveMixerUpdateMetronomePatternC = Void Function(Pointer<Void>, Int32, Pointer<Int32>, Pointer<Int32>, Int32, Float, Bool, Bool);
-typedef LiveMixerUpdateMetronomePatternDart = void Function(Pointer<Void>, int, Pointer<Int32>, Pointer<Int32>, int, double, bool, bool);
+typedef LiveMixerUpdateMetronomePatternC = Void Function(Pointer<Void>, Int32, Pointer<Int32>, Pointer<Int32>, Pointer<Double>, Int32, Float, Bool, Bool);
+typedef LiveMixerUpdateMetronomePatternDart = void Function(Pointer<Void>, int, Pointer<Int32>, Pointer<Int32>, Pointer<Double>, int, double, bool, bool);
 
 typedef LiveMixerRemoveMetronomePatternC = Void Function(Pointer<Void>, Int32);
 typedef LiveMixerRemoveMetronomePatternDart = void Function(Pointer<Void>, int);
@@ -270,7 +270,7 @@ class LiveMixerBindings {
       calloc.free(ptr);
   }
 
-  void addMetronomePattern(Pointer<Void> mixer, int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+  void addMetronomePattern(Pointer<Void> mixer, int id, List<int>? flatPattern, List<int>? subdivisions, List<double>? durationRatios, double vol, bool mute, bool solo) {
       Pointer<Int32> flatPtr = nullptr;
       if (flatPattern != null && flatPattern.isNotEmpty) {
           flatPtr = calloc<Int32>(flatPattern.length);
@@ -283,14 +283,20 @@ class LiveMixerBindings {
           subPtr = calloc<Int32>(numPulses);
           subPtr.asTypedList(numPulses).setAll(0, subdivisions);
       }
+      Pointer<Double> durPtr = nullptr;
+      if (durationRatios != null && durationRatios.isNotEmpty) {
+          durPtr = calloc<Double>(durationRatios.length);
+          durPtr.asTypedList(durationRatios.length).setAll(0, durationRatios);
+      }
       
-      _addMetronomePattern(mixer, id, flatPtr, subPtr, numPulses, vol, mute, solo);
+      _addMetronomePattern(mixer, id, flatPtr, subPtr, durPtr, numPulses, vol, mute, solo);
       
       if (flatPtr != nullptr) calloc.free(flatPtr);
       if (subPtr != nullptr) calloc.free(subPtr);
+      if (durPtr != nullptr) calloc.free(durPtr);
   }
 
-  void updateMetronomePattern(Pointer<Void> mixer, int id, List<int>? flatPattern, List<int>? subdivisions, double vol, bool mute, bool solo) {
+  void updateMetronomePattern(Pointer<Void> mixer, int id, List<int>? flatPattern, List<int>? subdivisions, List<double>? durationRatios, double vol, bool mute, bool solo) {
       Pointer<Int32> flatPtr = nullptr;
       if (flatPattern != null && flatPattern.isNotEmpty) {
           flatPtr = calloc<Int32>(flatPattern.length);
@@ -303,11 +309,17 @@ class LiveMixerBindings {
           subPtr = calloc<Int32>(numPulses);
           subPtr.asTypedList(numPulses).setAll(0, subdivisions);
       }
+      Pointer<Double> durPtr = nullptr;
+      if (durationRatios != null && durationRatios.isNotEmpty) {
+          durPtr = calloc<Double>(durationRatios.length);
+          durPtr.asTypedList(durationRatios.length).setAll(0, durationRatios);
+      }
       
-      _updateMetronomePattern(mixer, id, flatPtr, subPtr, numPulses, vol, mute, solo);
+      _updateMetronomePattern(mixer, id, flatPtr, subPtr, durPtr, numPulses, vol, mute, solo);
       
       if (flatPtr != nullptr) calloc.free(flatPtr);
       if (subPtr != nullptr) calloc.free(subPtr);
+      if (durPtr != nullptr) calloc.free(durPtr);
   }
 
   void removeMetronomePattern(Pointer<Void> mixer, int id) => _removeMetronomePattern(mixer, id);

@@ -636,7 +636,7 @@ void LiveMixer::setMetronomeSound(int type, const float* data, int numSamples) {
     }
 }
 
-void LiveMixer::_parseFlatPattern(MetronomeTrack& track, const int* flatData, const int* subdivisions, int numPulses) {
+void LiveMixer::_parseFlatPattern(MetronomeTrack& track, const int* flatData, const int* subdivisions, const double* durationRatios, int numPulses) {
     track.pulses.clear();
     if (numPulses <= 0 || !flatData || !subdivisions) return;
     
@@ -647,30 +647,31 @@ void LiveMixer::_parseFlatPattern(MetronomeTrack& track, const int* flatData, co
         for (int j = 0; j < m; j++) {
             pulse.subdivisions.push_back(flatData[dataIndex++]);
         }
+        pulse.durationRatio = (durationRatios && i < numPulses) ? durationRatios[i] : 1.0;
         track.pulses.push_back(pulse);
     }
 }
 
-void LiveMixer::addMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo) {
+void LiveMixer::addMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, const double* durationRatios, int numPulses, float vol, bool mute, bool solo) {
     std::lock_guard<std::mutex> lock(_mutex);
     MetronomeTrack track;
     track.id = id;
     track.volume = vol;
     track.muted = mute;
     track.solo = solo;
-    _parseFlatPattern(track, flatPatternData, subdivisionsData, numPulses);
+    _parseFlatPattern(track, flatPatternData, subdivisionsData, durationRatios, numPulses);
     _metronomeTracks.push_back(track);
     _updateGlobalSolo();
 }
 
-void LiveMixer::updateMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo) {
+void LiveMixer::updateMetronomePattern(int id, const int* flatPatternData, const int* subdivisionsData, const double* durationRatios, int numPulses, float vol, bool mute, bool solo) {
     std::lock_guard<std::mutex> lock(_mutex);
     for (auto& track : _metronomeTracks) {
         if (track.id == id) {
             track.volume = vol;
             track.muted = mute;
             track.solo = solo;
-            _parseFlatPattern(track, flatPatternData, subdivisionsData, numPulses);
+            _parseFlatPattern(track, flatPatternData, subdivisionsData, durationRatios, numPulses);
             break;
         }
     }
@@ -853,33 +854,60 @@ void LiveMixer::_mixInternal(float* outputBuffer, int numFrames) {
                 if (playTrack && track.volume > 0.0f) {
                     int numPulses = (int)track.pulses.size();
                     
-                    // Current Sample state
-                    int currBeatAbs = (int)currBeatFloat;
-                    int currPulse = currBeatAbs % numPulses;
-                    int currM = (int)track.pulses[currPulse].subdivisions.size();
-                    int currSub = 0;
-                    if (currM > 0) {
-                        currSub = (int)((currBeatFloat - currBeatAbs) * currM);
-                        if (currSub >= currM) currSub = currM - 1;
+                    // Compute total cycle duration in beats (sum of all durationRatios)
+                    double cycleDuration = 0.0;
+                    for (int p = 0; p < numPulses; p++) {
+                        cycleDuration += track.pulses[p].durationRatio;
                     }
+                    if (cycleDuration <= 0.0) cycleDuration = (double)numPulses;
                     
-                    // Previous Sample state
-                    int prevBeatAbs = -1;
-                    int prevPulse = -1;
-                    int prevSub = -1;
+                    // Current and previous position within the cycle
+                    double currCyclePos = fmod(currBeatFloat, cycleDuration);
+                    if (currCyclePos < 0.0) currCyclePos += cycleDuration;
+                    double prevCyclePos = fmod(prevBeatFloat, cycleDuration);
+                    if (prevCyclePos < 0.0) prevCyclePos += cycleDuration;
+                    
+                    // Find which pulse and subdivision we are in
+                    auto findPulseAndSub = [&](double pos, int& outPulse, int& outSub) {
+                        double accum = 0.0;
+                        for (int p = 0; p < numPulses; p++) {
+                            double pulseEnd = accum + track.pulses[p].durationRatio;
+                            if (pos < pulseEnd || p == numPulses - 1) {
+                                outPulse = p;
+                                double fractInPulse = (pos - accum) / track.pulses[p].durationRatio;
+                                int m = (int)track.pulses[p].subdivisions.size();
+                                outSub = (int)(fractInPulse * m);
+                                if (outSub >= m) outSub = m - 1;
+                                if (outSub < 0) outSub = 0;
+                                return;
+                            }
+                            accum = pulseEnd;
+                        }
+                        outPulse = 0;
+                        outSub = 0;
+                    };
+                    
+                    int currPulse = 0, currSub = 0;
+                    findPulseAndSub(currCyclePos, currPulse, currSub);
+                    
+                    int prevPulse = -1, prevSub = -1;
                     if (_currentPosition > 0 && prevBeatFloat >= 0.0) {
-                        prevBeatAbs = (int)prevBeatFloat;
-                        prevPulse = prevBeatAbs % numPulses;
-                        int prevM = (int)track.pulses[prevPulse].subdivisions.size();
-                        if (prevM > 0) {
-                            prevSub = (int)((prevBeatFloat - prevBeatAbs) * prevM);
-                            if (prevSub >= prevM) prevSub = prevM - 1;
+                        // Handle cycle wrap: if prev is in a different cycle than curr
+                        int currCycle = (int)(currBeatFloat / cycleDuration);
+                        int prevCycle = (int)(prevBeatFloat / cycleDuration);
+                        if (currCycle != prevCycle) {
+                            // Wrapped around — force trigger
+                            prevPulse = -1;
+                            prevSub = -1;
+                        } else {
+                            findPulseAndSub(prevCyclePos, prevPulse, prevSub);
                         }
                     }
                     
-                    // If moving forward exactly into a new beat OR a new subdivision tick, trigger sound
-                    if (currBeatAbs != prevBeatAbs || currSub != prevSub) {
-                        if (currM > 0) {
+                    // Trigger on pulse/subdivision change
+                    if (currPulse != prevPulse || currSub != prevSub) {
+                        int m = (int)track.pulses[currPulse].subdivisions.size();
+                        if (m > 0) {
                             int type = track.pulses[currPulse].subdivisions[currSub];
                             if (type == 1) volHigh = (std::max)(volHigh, track.volume);
                             else if (type == 2) volLow = (std::max)(volLow, track.volume);
@@ -1097,15 +1125,15 @@ extern "C" {
         static_cast<LiveMixer*>(mixer)->setMetronomeSound(type, data, numSamples);
     }
 
-EXPORT void live_mixer_add_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo) {
+EXPORT void live_mixer_add_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, const double* durationRatios, int numPulses, float vol, bool mute, bool solo) {
     if (mixer) {
-        static_cast<LiveMixer*>(mixer)->addMetronomePattern(id, flatPatternData, subdivisionsData, numPulses, vol, mute, solo);
+        static_cast<LiveMixer*>(mixer)->addMetronomePattern(id, flatPatternData, subdivisionsData, durationRatios, numPulses, vol, mute, solo);
     }
 }
 
-EXPORT void live_mixer_update_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, int numPulses, float vol, bool mute, bool solo) {
+EXPORT void live_mixer_update_metronome_pattern(void* mixer, int id, const int* flatPatternData, const int* subdivisionsData, const double* durationRatios, int numPulses, float vol, bool mute, bool solo) {
     if (mixer) {
-        static_cast<LiveMixer*>(mixer)->updateMetronomePattern(id, flatPatternData, subdivisionsData, numPulses, vol, mute, solo);
+        static_cast<LiveMixer*>(mixer)->updateMetronomePattern(id, flatPatternData, subdivisionsData, durationRatios, numPulses, vol, mute, solo);
     }
 }
 

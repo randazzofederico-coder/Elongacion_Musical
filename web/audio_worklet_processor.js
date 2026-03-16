@@ -170,15 +170,21 @@ class LiveMixerWorkletProcessor extends AudioWorkletProcessor {
                     subPtr = m._malloc(numPulses * 4);
                     m.HEAP32.set(data.subdivisions, subPtr / 4);
                 }
+                let durPtr = 0;
+                if (data.durationRatios && data.durationRatios.length > 0) {
+                    durPtr = m._malloc(data.durationRatios.length * 8);
+                    m.HEAPF64.set(data.durationRatios, durPtr / 8);
+                }
                 
                 if (data.cmd === 'addMetronomePattern') {
-                    m._live_mixer_add_metronome_pattern(handle, data.id, flatPtr, subPtr, numPulses, data.vol, data.mute, data.solo);
+                    m._live_mixer_add_metronome_pattern(handle, data.id, flatPtr, subPtr, durPtr, numPulses, data.vol, data.mute, data.solo);
                 } else {
-                    m._live_mixer_update_metronome_pattern(handle, data.id, flatPtr, subPtr, numPulses, data.vol, data.mute, data.solo);
+                    m._live_mixer_update_metronome_pattern(handle, data.id, flatPtr, subPtr, durPtr, numPulses, data.vol, data.mute, data.solo);
                 }
                 
                 if (flatPtr !== 0) m._free(flatPtr);
                 if (subPtr !== 0) m._free(subPtr);
+                if (durPtr !== 0) m._free(durPtr);
                 break;
             }
             case 'removeMetronomePattern':
