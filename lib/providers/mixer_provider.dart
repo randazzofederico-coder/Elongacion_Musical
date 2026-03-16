@@ -80,6 +80,9 @@ class MixerProvider with ChangeNotifier {
   // TrackList Passthrough
   List<TrackModel> get tracks => trackList.tracks;
   List<List<double>> get masterWaveformData => trackList.masterWaveformData;
+  ValueNotifier<List<List<double>>> get liveMasterWaveformNotifier => trackList.liveMasterWaveformNotifier;
+  void recomputeLiveMasterWaveform(String trackId, double liveVolume) => trackList.recomputeLiveMasterWaveform(trackId, liveVolume);
+  void syncLiveMasterWaveform() => trackList.syncLiveMasterWaveform();
   double get masterVolume => trackList.masterVolume;
   
   double get metronomeVol34 => trackList.metronomeVol34;
@@ -102,11 +105,16 @@ class MixerProvider with ChangeNotifier {
   }
   
   Future<void> setMasterVolume(double vol) => trackList.setMasterVolume(vol);
+  void setMasterVolumeDirect(double vol) => trackList.setMasterVolumeDirect(vol);
+  Future<void> commitMasterVolume() => trackList.commitMasterVolume();
   Future<void> setTrackVolume(String id, double vol) => trackList.setTrackVolume(id, vol);
+  void setTrackVolumeDirect(String id, double vol) => trackList.setTrackVolumeDirect(id, vol);
   Future<void> commitTrackVolume() => trackList.commitTrackVolume();
   Future<void> toggleTrackMute(String id) => trackList.toggleTrackMute(id);
   Future<void> toggleSolo(String id) => trackList.toggleSolo(id);
   Future<void> setTrackPan(String id, double pan) => trackList.setTrackPan(id, pan);
+  void setTrackPanDirect(String id, double pan) => trackList.setTrackPanDirect(id, pan);
+  Future<void> commitTrackPan(String id) => trackList.commitTrackPan(id);
   void reorderTracks(int oldIndex, int newIndex) => trackList.reorderTracks(oldIndex, newIndex);
 
   // Master & Metronome Mute / Solo

@@ -76,3 +76,54 @@ Driven by a custom cross-platform C++ engine (`live_mixer.cpp`) connected to Dar
 - **C++ Engine Refactor:** `packages/native_audio_engine/src/live_mixer.cpp` is a powerful but monolithic file (~800 lines). Future steps involve separating this into smaller classes (`TrackManager`, `MetronomeGenerator`, `StretcherContext`).
 - **Dart Refactor:** `AudioManager.dart` (~485 lines) and `MixerStreamSource.dart` (>300 lines) combine stream logic with heavy playback and metronome configuration. These need logical division to follow the strict project standards.
 - **Platform Focus:** Continued optimization testing on Android for low-latency touch interactions and responsiveness down to ~40ms.
+
+## 6. WEB PERFORMANCE OPTIMIZATIONS
+
+The web build (CanvasKit renderer) exhibits inherent overhead vs native builds due to WebAssembly rendering, DOM virtual layer, and slower GC. The following optimizations bring the mixer UI to near-native responsiveness.
+
+### Phase 1: Global Widget Optimization
+
+| Fix | File(s) | Description |
+|-----|---------|-------------|
+| `shouldRepaint` | `vertical_waveform.dart`, `waveform_painter.dart` | Was always returning `true`. Now compares `progress`, `data`, `gain`, `color`. |
+| Ticker → ValueNotifier | `metronome_screen.dart`, `waveform_seek_bar.dart` | Replaced `setState()` at 60fps with `ValueNotifier` + `ValueListenableBuilder`, scoping rebuilds to only the playhead widget. |
+| Selector | `transport_section.dart`, `mixer_screen.dart` | Replaced `context.watch<MixerProvider>()` with granular `Selector` (e.g., `isPlaying`, `isLooping`). |
+| AnimatedContainer → Container | `transport_section.dart`, `track_controls.dart` | Removed implicit animation tickers (200ms blur interpolation) on web. |
+| BoxShadow kIsWeb | `channel_strip_container.dart`, `transport_section.dart`, `waveform_seek_bar.dart` | Conditionally disabled `BoxShadow` blur on web. Native retains full visual fidelity. |
+
+### Phase 2: Mixer Rebuild Cascade Elimination
+
+| Fix | File(s) | Description |
+|-----|---------|-------------|
+| Granular Selector for WaveformSeekBar | `mixer_screen.dart` | Added `isPlaying` to Selector to ensure playhead Ticker starts on Play. |
+| MasterSection Selector | `master_section.dart` | Replaced `ListenableBuilder(Listenable.merge(tracks))` with `Selector` on master-specific fields only, preventing cascade rebuilds from track fader drags. |
+| RepaintBoundary isolation | `track_strip.dart` | Wrapped `VerticalWaveform` and `TrackControls` in `RepaintBoundary` to isolate repaint regions. |
+| FaderPainter GPU optimization | `fader_control.dart` | Web: flat color instead of `LinearGradient.createShader()`, no `MaskFilter.blur()`, no `drawShadow`. Native retains premium look. |
+| Text Shadow guard | `track_controls.dart` | Guarded text `Shadow` with `kIsWeb` to avoid blur computations. |
+
+### Phase 3: Local Drag State Pattern
+
+The critical architectural change for snappy fader interaction:
+
+| Fix | File(s) | Description |
+|-----|---------|-------------|
+| Local drag state (FaderControl) | `fader_control.dart` | During drag, uses `_dragVolume` with local `setState()` for instant visual feedback, completely decoupled from `TrackModel.notifyListeners()` cascade. |
+| Local drag state (KnobControl) | `knob_control.dart` | Same pattern with `_dragValue` for pan knob. |
+| Direct-to-native methods | `audio_manager.dart`, `track_list_provider.dart`, `mixer_provider.dart` | `setTrackVolumeDirect()`, `setTrackPanDirect()`, `setMasterVolumeDirect()` send to C++ engine only, bypassing `TrackModel.volume` setter (which fires `notifyListeners`). Full model sync happens on drag end. |
+| ClipRRect optimization | `channel_strip_container.dart` | Uses `Clip.hardEdge` instead of default `Clip.antiAlias` for cheaper GPU clipping. |
+
+**Before:** `Fader drag → track.volume = vol → notifyListeners → ListenableBuilder → rebuild ChannelStripContainer + VerticalWaveform + TrackControls (every pixel)`
+**After:** `Fader drag → local setState (instant) + setVolumeDirect (audio only) → ZERO widget rebuilds`
+
+### Phase 4: Real-Time Waveform Visualization
+
+Waveform rendering during fader interaction uses cached paths and GPU-level transforms:
+
+| Component | Technique | Cost |
+|-----------|-----------|------|
+| **Track waveforms** | Base `Path` cached at `gain=1.0` (built once on load). Gain applied via `canvas.scale(gain, 1.0)` — a single GPU transform. | O(1) per frame |
+| **Master waveform** | Weighted sum of all tracks' peak data, recomputed on commit. Same cached Path + `canvas.scale` for master gain. | O(tracks × points) on commit only |
+| **Live gain bridge** | `ValueNotifier<double>` owned by `TrackStrip`/`MasterStrip`. FaderControl writes, VerticalWaveform reads via `CustomPainter(repaint: notifier)`. | Zero widget rebuilds |
+| **Downsampling** | If waveform data has more points than available pixels, reduces using peak-per-bucket bucketing (e.g., 2000 → 400 vertices). | One-time on cache build |
+
+**Architecture:** `VerticalWaveform` is a `StatefulWidget` that caches `_ChannelPathInfo` (Path + centerX). The `_ScaledWaveformPainter` reads `gainNotifier?.value` live in `paint()` via a getter — when the notifier fires, only `paint()` re-executes with the new gain value, no widget rebuild occurs.

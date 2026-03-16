@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:elongacion_musical/constants/app_colors.dart';
@@ -186,7 +187,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
               decoration: BoxDecoration(
                 color: isPlaying ? AppColors.accentRed(context) : AppColors.accentCyan(context),
                 shape: BoxShape.circle,
-                boxShadow: [
+                boxShadow: kIsWeb ? null : [
                   BoxShadow(
                     color: (isPlaying ? AppColors.accentRed(context) : AppColors.accentCyan(context)).withOpacity(0.4),
                     blurRadius: 16,
@@ -312,6 +313,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
       required String label,
       required double value,
       required Function(double) onChanged,
+      Function(double)? onChangeEnd,
       required bool isMuted,
       required VoidCallback onMuteToggle,
       required bool isSolo,
@@ -326,6 +328,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
               KnobControl(
                   value: value,
                   onChanged: onChanged,
+                  onChangeEnd: onChangeEnd,
                   min: 0,
                   max: 1,
                   label: label,
@@ -772,23 +775,55 @@ class _MacroCycleVisualizer extends StatefulWidget {
 
 class _MacroCycleVisualizerState extends State<_MacroCycleVisualizer> with SingleTickerProviderStateMixin {
   late Ticker _ticker;
+  final ValueNotifier<double> _progressNotifier = ValueNotifier<double>(0.0);
+  bool _wasPlaying = false;
 
   @override
   void initState() {
     super.initState();
     _ticker = createTicker((elapsed) {
-      if (widget.metronome.isPlaying) {
-        setState(() {}); // Repaint at 60fps
-      } else if (widget.metronome.currentMacroProgress == 0.0) {
-        setState(() {}); // Ensure it snaps to 0 on stop
+      final newProgress = widget.metronome.currentMacroProgress;
+      if (_progressNotifier.value != newProgress) {
+        _progressNotifier.value = newProgress;
+      }
+      // Auto-stop ticker when playback stops
+      if (!widget.metronome.isPlaying) {
+        _ticker.stop();
+        _wasPlaying = false;
+        // Snap to 0
+        _progressNotifier.value = widget.metronome.currentMacroProgress;
       }
     });
-    _ticker.start();
+    // Only start if already playing
+    if (widget.metronome.isPlaying) {
+      _ticker.start();
+      _wasPlaying = true;
+    }
+    // Listen for play/stop changes to start/stop ticker
+    widget.metronome.addListener(_onMetronomeChanged);
+  }
+
+  void _onMetronomeChanged() {
+    final isPlaying = widget.metronome.isPlaying;
+    if (isPlaying && !_wasPlaying) {
+      if (!_ticker.isActive) _ticker.start();
+      _wasPlaying = true;
+    } else if (!isPlaying && _wasPlaying) {
+      // Will be stopped inside the ticker callback after snapping
+      // But also handle immediate stop
+      if (_ticker.isActive) _ticker.stop();
+      _wasPlaying = false;
+      _progressNotifier.value = widget.metronome.currentMacroProgress;
+    }
+    // Rebuild the cell matrix only when instances/structure changes (not on every tick)
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    widget.metronome.removeListener(_onMetronomeChanged);
     _ticker.dispose();
+    _progressNotifier.dispose();
     super.dispose();
   }
 
@@ -806,7 +841,6 @@ class _MacroCycleVisualizerState extends State<_MacroCycleVisualizer> with Singl
     if (widget.metronome.instances.isEmpty) return const SizedBox.shrink();
 
     int macroBeats = widget.metronome.macroCycleBeats;
-    double progress = widget.metronome.currentMacroProgress;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -831,7 +865,7 @@ class _MacroCycleVisualizerState extends State<_MacroCycleVisualizer> with Singl
               return Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Matrix of cells
+                  // Matrix of cells — only rebuilds when instances/structure changes
                   Column(
                     children: widget.metronome.instances.map((instance) {
                       return Container(
@@ -857,7 +891,7 @@ class _MacroCycleVisualizerState extends State<_MacroCycleVisualizer> with Singl
                                           
                                        return Expanded(
                                           child: Container(
-                                              margin: EdgeInsets.only(top: isHead ? 0 : 3), // step down logic
+                                              margin: EdgeInsets.only(top: isHead ? 0 : 3),
                                               decoration: BoxDecoration(
                                                   color: type == 0 ? color : color.withOpacity(0.4),
                                                   border: Border(
@@ -868,7 +902,6 @@ class _MacroCycleVisualizerState extends State<_MacroCycleVisualizer> with Singl
                                                       bottom: BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1),
                                                       left: isHead ? BorderSide(color: type == 0 ? AppColors.border(context) : color.withOpacity(0.8), width: 1) : BorderSide(color: Colors.transparent, width: 1),
                                                   ),
-                                                  // Removed borderRadius because Flutter requires uniform borders to use borderRadius
                                               ),
                                           ),
                                        );
@@ -882,18 +915,24 @@ class _MacroCycleVisualizerState extends State<_MacroCycleVisualizer> with Singl
                     }).toList(),
                   ),
                   
-                  // Playhead
-                  Positioned(
-                    left: constraints.maxWidth * progress,
-                    top: -4,
-                    bottom: 0,
+                  // Playhead — ONLY this rebuilds at 60fps via ValueNotifier
+                  ValueListenableBuilder<double>(
+                    valueListenable: _progressNotifier,
+                    builder: (context, progress, child) {
+                      return Positioned(
+                        left: constraints.maxWidth * progress,
+                        top: -4,
+                        bottom: 0,
+                        child: child!,
+                      );
+                    },
                     child: Container(
                       width: 2,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(color: Colors.white.withOpacity(0.5), blurRadius: 4, spreadRadius: 1)
-                        ]
+                         boxShadow: kIsWeb ? null : [
+                           BoxShadow(color: Colors.white.withOpacity(0.5), blurRadius: 4, spreadRadius: 1)
+                         ]
                       ),
                     ),
                   ),

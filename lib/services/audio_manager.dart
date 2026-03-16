@@ -430,6 +430,12 @@ class AudioManager {
      _source?.setVolume(id, vol);
      _notifyDirty();
   }
+
+  /// Direct-to-native: only sends to audio engine, does NOT update TrackModel.
+  /// Use during continuous drag to avoid notifyListeners cascade.
+  void setTrackVolumeDirect(String id, double vol) {
+     _source?.setVolume(id, vol);
+  }
   
   // -- High Precision Polling Getter --
   Duration get currentPosition {
@@ -448,6 +454,11 @@ class AudioManager {
      track.pan = pan;
      _source?.setPan(id, pan);
      _notifyDirty();
+  }
+
+  /// Direct-to-native: only sends to audio engine, does NOT update TrackModel.
+  void setTrackPanDirect(String id, double pan) {
+     _source?.setPan(id, pan);
   }
   
   void toggleTrackMute(String id) {

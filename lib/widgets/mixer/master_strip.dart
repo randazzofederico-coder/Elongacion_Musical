@@ -5,7 +5,7 @@ import 'package:elongacion_musical/constants/app_colors.dart';
 import 'package:elongacion_musical/widgets/mixer/channel_strip_container.dart';
 import 'package:flutter/material.dart';
 
-class MasterStrip extends StatelessWidget {
+class MasterStrip extends StatefulWidget {
   final List<List<double>> waveformData;
   final double volume;
   final ValueChanged<double> onVolumeChanged;
@@ -32,20 +32,52 @@ class MasterStrip extends StatelessWidget {
   });
 
   @override
+  State<MasterStrip> createState() => _MasterStripState();
+}
+
+class _MasterStripState extends State<MasterStrip> {
+  /// Live gain notifier for master fader → master waveform visual
+  late final ValueNotifier<double> _liveGain;
+
+  @override
+  void initState() {
+    super.initState();
+    _liveGain = ValueNotifier(widget.volume);
+  }
+
+  @override
+  void didUpdateWidget(MasterStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _liveGain.value = widget.volume;
+  }
+
+  @override
+  void dispose() {
+    _liveGain.dispose();
+    super.dispose();
+  }
+
+  void _onVolumeChanged(double vol) {
+    _liveGain.value = vol; // Instant visual via gainNotifier
+    widget.onVolumeChanged(vol); // Audio engine (Direct)
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ChannelStripContainer(
-      width: width ?? (showWaveform ? 120 : 80),
+      width: widget.width ?? (widget.showWaveform ? 120 : 80),
       label: "MASTER",
       isMaster: true,
       headerBgColor: AppColors.accentRed(context).withOpacity(0.15),
       headerTextColor: AppColors.accentRed(context),
-      waveformArea: showWaveform 
+      waveformArea: widget.showWaveform 
           ? VerticalWaveform(
-              data: waveformData,
+              data: widget.waveformData,
               width: double.infinity,
               color: AppColors.waveformMaster(context), 
-              progress: progress,
-              gain: volume, 
+              progress: widget.progress,
+              gain: widget.volume,
+              gainNotifier: _liveGain, // Live gain from master fader drag
             )
           : null,
       controlsArea: Container(
@@ -57,22 +89,21 @@ class MasterStrip extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4.0), 
                 child: FaderControl(
-                  volume: volume,
-                  onChanged: onVolumeChanged,
-                  onChangeEnd: onVolumeChangeEnd,
+                  volume: widget.volume,
+                  onChanged: _onVolumeChanged,
+                  onChangeEnd: widget.onVolumeChangeEnd,
                   color: AppColors.waveformMaster(context),
                 ),
               ),
             ),
 
-            // 2. Metronome Controls (Bottom) - Fixed Height Box 
-            // Set to 110 to safely match track controls without overflow
+            // 2. Metronome Controls (Bottom)
             SizedBox(
               height: 110,
               child: _MetronomeControls(
-                 vol34: metronomeVol34,
-                 vol68: metronomeVol68,
-                 onChanged: onMetronomeChanged,
+                 vol34: widget.metronomeVol34,
+                 vol68: widget.metronomeVol68,
+                 onChanged: widget.onMetronomeChanged,
               ),
             ),
           ],
@@ -102,7 +133,7 @@ class _MetronomeControlsState extends State<_MetronomeControls> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.only(bottom: 4), // Tiny padding
+      padding: const EdgeInsets.only(bottom: 4),
       child: Column(
         mainAxisSize: MainAxisSize.max, 
         mainAxisAlignment: MainAxisAlignment.end,
@@ -117,9 +148,9 @@ class _MetronomeControlsState extends State<_MetronomeControls> {
             label: "3/4", 
             labelColor: widget.vol34 > 0 ? AppColors.accentGreen(context) : AppColors.accentRed(context),
             zeroAtCenter: false,
-            size: 28, // Native size
+            size: 28,
           ),
-          const Spacer(), // Perfect distribution inside the 110px box
+          const Spacer(),
           KnobControl(
             value: widget.vol68,
             onChanged: (val) {
@@ -130,7 +161,7 @@ class _MetronomeControlsState extends State<_MetronomeControls> {
             label: "6/8", 
             labelColor: widget.vol68 > 0 ? AppColors.accentGreen(context) : AppColors.accentRed(context),
             zeroAtCenter: false,
-            size: 28, // Native size
+            size: 28,
           ),
         ],
       ),

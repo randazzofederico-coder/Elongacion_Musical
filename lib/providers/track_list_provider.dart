@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:elongacion_musical/services/audio_manager.dart';
 import 'package:elongacion_musical/services/settings_service.dart';
@@ -33,6 +34,12 @@ class TrackListProvider extends ChangeNotifier {
   }
 
   double get masterVolume => _audioManager.masterVolume;
+
+  /// Live master waveform notifier — updated during fader drag for real-time visual
+  final ValueNotifier<List<List<double>>> liveMasterWaveformNotifier = ValueNotifier([]);
+  
+  /// Track of live volume overrides during drag (trackId → liveVolume)
+  final Map<String, double> _liveVolumeOverrides = {};
 
   List<List<double>> get masterWaveformData {
     if (_cachedMasterWaveform != null) return _cachedMasterWaveform!;
@@ -77,11 +84,20 @@ class TrackListProvider extends ChangeNotifier {
   
   Future<void> setMasterVolume(double vol) async {
     _masterVol = vol;
-    _audioManager.setMasterVolume(vol); // Native handles its own Mute multiplier
-    if (_currentExercise != null) {
-      await _settingsService.setMasterVolume(_currentExercise!.id, vol);
-    }
+    _audioManager.setMasterVolume(vol);
     notifyListeners();
+  }
+
+  /// Direct-to-native: no notifyListeners, for use during master fader drag
+  void setMasterVolumeDirect(double vol) {
+    _masterVol = vol;
+    _audioManager.setMasterVolume(vol);
+  }
+
+  Future<void> commitMasterVolume() async {
+    if (_currentExercise != null) {
+      await _settingsService.setMasterVolume(_currentExercise!.id, _masterVol);
+    }
   }
 
   // Metronome Controls
@@ -156,13 +172,86 @@ class TrackListProvider extends ChangeNotifier {
 
   Future<void> setTrackVolume(String trackId, double volume) async {
     _audioManager.setTrackVolume(trackId, volume);
-    if (_currentExercise != null) {
-      await _settingsService.setTrackVolume(_currentExercise!.id, trackId, volume);
+  }
+
+  /// Direct-to-native: no TrackModel notification, for use during drag
+  void setTrackVolumeDirect(String trackId, double volume) {
+    _audioManager.setTrackVolumeDirect(trackId, volume);
+  }
+
+  /// Recompute the master waveform with a live volume override.
+  /// Called during fader drag for real-time master waveform update.
+  void recomputeLiveMasterWaveform(String trackId, double liveVolume) {
+    _liveVolumeOverrides[trackId] = liveVolume;
+    liveMasterWaveformNotifier.value = _generateLiveMasterWaveform();
+  }
+  
+  /// Clear live overrides and sync notifier with cached master
+  void syncLiveMasterWaveform() {
+    _liveVolumeOverrides.clear();
+    _cachedMasterWaveform = null; // Force recompute on next access  
+    liveMasterWaveformNotifier.value = masterWaveformData;
+  }
+
+  List<List<double>> _generateLiveMasterWaveform() {
+    final tracks = _audioManager.tracks;
+    if (tracks.isEmpty) return [];
+    
+    int points = 0;
+    for (var t in tracks) {
+      if (t.waveformData.isNotEmpty) {
+        points = max(points, t.waveformData[0].length);
+      }
     }
+    if (points == 0) return [];
+    
+    List<double> masterL = List.filled(points, 0.0);
+    List<double> masterR = List.filled(points, 0.0);
+    bool anySolo = tracks.any((t) => t.isSolo);
+    
+    for (var track in tracks) {
+      if (anySolo) {
+        if (!track.isSolo) continue;
+      } else {
+        if (track.isMuted) continue;
+      }
+      if (track.waveformData.isEmpty) continue;
+      
+      // Use live override if available, otherwise model value
+      double vol = _liveVolumeOverrides[track.id] ?? track.volume;
+      double pan = track.pan;
+      double lGain = pan > 0 ? 1.0 - pan : 1.0;
+      double rGain = pan < 0 ? 1.0 + pan : 1.0;
+      bool isStereo = track.waveformData.length > 1;
+      int trackPoints = track.waveformData[0].length;
+      
+      for (int i = 0; i < points && i < trackPoints; i++) {
+        if (isStereo) {
+          masterL[i] += track.waveformData[0][i] * vol * lGain;
+          masterR[i] += track.waveformData[1][i] * vol * rGain;
+        } else {
+          double val = track.waveformData[0][i];
+          masterL[i] += val * vol * lGain;
+          masterR[i] += val * vol * rGain;
+        }
+      }
+    }
+    
+    for (int i = 0; i < points; i++) {
+      if (masterL[i] > 1.0) masterL[i] = 1.0;
+      if (masterR[i] > 1.0) masterR[i] = 1.0;
+    }
+    
+    return [masterL, masterR];
   }
 
   Future<void> commitTrackVolume() async {
     _cachedMasterWaveform = null;
+    if (_currentExercise != null) {
+      for (var t in _audioManager.tracks) {
+        await _settingsService.setTrackVolume(_currentExercise!.id, t.id, t.volume);
+      }
+    }
     notifyListeners();
     await _audioManager.refreshPlayback();
   }
@@ -189,9 +278,18 @@ class TrackListProvider extends ChangeNotifier {
 
   Future<void> setTrackPan(String trackId, double pan) async {
     _audioManager.setTrackPan(trackId, pan);
+  }
+
+  /// Direct-to-native: no TrackModel notification, for use during drag
+  void setTrackPanDirect(String trackId, double pan) {
+    _audioManager.setTrackPanDirect(trackId, pan);
+  }
+
+  Future<void> commitTrackPan(String trackId) async {
     _cachedMasterWaveform = null;
     if (_currentExercise != null) {
-      await _settingsService.setTrackPan(_currentExercise!.id, trackId, pan);
+      final t = _audioManager.tracks.firstWhere((element) => element.id == trackId);
+      await _settingsService.setTrackPan(_currentExercise!.id, trackId, t.pan);
     }
     notifyListeners();
   }

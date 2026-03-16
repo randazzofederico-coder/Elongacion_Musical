@@ -31,9 +31,18 @@ class TrackListSection extends StatelessWidget {
                   track: track,
                   showWaveform: showWaveform,
                   useKnobForVolume: useKnobForVolume,
-                  onVolumeChanged: (val) => mixer.setTrackVolume(track.id, val),
-                  onVolumeChangeEnd: (val) => mixer.commitTrackVolume(),
-                  onPanChanged: (val) => mixer.setTrackPan(track.id, val),
+                  // During drag: only update native engine, no TrackModel.notifyListeners
+                  onVolumeChanged: (val) => mixer.setTrackVolumeDirect(track.id, val),
+                  onVolumeChangeEnd: (val) {
+                    // Sync model + save settings
+                    mixer.setTrackVolume(track.id, val);
+                    mixer.commitTrackVolume();
+                  },
+                  onPanChanged: (val) => mixer.setTrackPanDirect(track.id, val),
+                  onPanChangeEnd: (val) {
+                    mixer.setTrackPan(track.id, val);
+                    mixer.commitTrackPan(track.id);
+                  },
                   onMuteToggle: () => mixer.toggleTrackMute(track.id),
                   onSoloToggle: () => mixer.toggleSolo(track.id),
                   isSoloed: track.isSolo,

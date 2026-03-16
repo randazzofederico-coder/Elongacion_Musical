@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
@@ -47,13 +48,14 @@ class WaveformSeekBar extends StatefulWidget {
 
 class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProviderStateMixin {
   late Ticker _ticker;
-  Duration _visualPosition = Duration.zero;
+  final ValueNotifier<Duration> _visualPositionNotifier = ValueNotifier<Duration>(Duration.zero);
   late WaveformInteractionController _interactionController;
+  bool _isPlaying = false;
 
   @override
   void initState() {
     super.initState();
-    _visualPosition = widget.position;
+    _visualPositionNotifier.value = widget.position;
     
     _initController();
 
@@ -79,15 +81,34 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
   void _onTick() {
      final mixer = context.read<MixerProvider>();
      if (mixer.isPlaying) {
-         setState(() {
-             _visualPosition = mixer.currentPosition;
-         });
+         final newPos = mixer.currentPosition;
+         if (_visualPositionNotifier.value != newPos) {
+           _visualPositionNotifier.value = newPos;
+         }
+     } else {
+         // Playback stopped — stop ticker
+         _ticker.stop();
+         _isPlaying = false;
+         _visualPositionNotifier.value = mixer.currentPosition;
      }
+  }
+
+  void _startTickerIfNeeded() {
+    final mixer = context.read<MixerProvider>();
+    if (mixer.isPlaying && !_isPlaying) {
+      if (!_ticker.isActive) _ticker.start();
+      _isPlaying = true;
+    } else if (!mixer.isPlaying && _isPlaying) {
+      if (_ticker.isActive) _ticker.stop();
+      _isPlaying = false;
+      _visualPositionNotifier.value = mixer.currentPosition;
+    }
   }
 
   @override
   void dispose() {
     _ticker.dispose();
+    _visualPositionNotifier.dispose();
     _interactionController.dispose();
     super.dispose();
   }
@@ -99,7 +120,7 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
     if (widget.position != oldWidget.position && _interactionController.dragPosition == null) {
         final mixer = context.read<MixerProvider>();
         if (!mixer.isPlaying) {
-            _visualPosition = widget.position;
+            _visualPositionNotifier.value = widget.position;
         }
     }
 
@@ -113,17 +134,15 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
     _interactionController.onSeek = widget.onSeek;
     _interactionController.onLoopRangeChanged = widget.onLoopRangeChanged;
     _interactionController.onLoopRangeChangeEnd = widget.onLoopRangeChangeEnd;
+
+    // Check play state on widget update (driven by MixerProvider notifications)
+    _startTickerIfNeeded();
   }
 
   @override
   Widget build(BuildContext context) {
-    final mixer = context.watch<MixerProvider>();
-    if (mixer.isPlaying && !_ticker.isActive) {
-        _ticker.start();
-    } else if (!mixer.isPlaying && _ticker.isActive) {
-        _ticker.stop();
-        _visualPosition = mixer.currentPosition;
-    }
+    // Start/stop ticker based on play state — only runs once per state change
+    _startTickerIfNeeded();
     
     final double totalMilliseconds = widget.duration.inMilliseconds.toDouble();
     
@@ -138,7 +157,6 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
         return ListenableBuilder(
           listenable: _interactionController,
           builder: (context, child) {
-            final double currentMilliseconds = _interactionController.dragPosition?.inMilliseconds.toDouble() ?? _visualPosition.inMilliseconds.toDouble();
             
             return Listener(
               onPointerDown: _interactionController.handlePointerDown,
@@ -152,12 +170,12 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
                 child: Column(
                   children: [
                     Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Perfect 16px visual match with header/transport
-                      padding: const EdgeInsets.all(6), // Shared bezel
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: AppColors.surface(context), // Base panel color
+                        color: AppColors.surface(context),
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
+                        boxShadow: kIsWeb ? null : [
                            BoxShadow(
                              color: Colors.black.withOpacity(0.08),
                              blurRadius: 10,
@@ -175,9 +193,9 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
                         children: [
                           if (widget.bpm != null && widget.bpm! > 0 && widget.timeSignatureNumerator != null && widget.timeSignatureNumerator! > 0)
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 1.0), // Align exactly with the 1px border of the waveform container below
+                              padding: const EdgeInsets.symmetric(horizontal: 1.0),
                               child: LoopRuler(
-                                width: width - 34, // 32 for outer margin/padding + 2 for the waveform borders
+                                width: width - 34,
                                 totalMs: totalMilliseconds,
                                 bpm: widget.bpm!,
                                 timeSignatureNumerator: widget.timeSignatureNumerator!,
@@ -192,61 +210,74 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
                               ),
                             ),
                             
-                          Container(
-                            decoration: BoxDecoration(
-                              color: AppColors.faderTrack(context).withOpacity(0.8), // Inset waveform area
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: AppColors.border(context).withOpacity(0.5)),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(5),
-                              child: SizedBox(
-                                height: height,
-                                width: width - 32, 
-                                child: CustomPaint(
-                                  painter: WaveformPainter(
-                                    waveformData: widget.waveformData,
-                                    position: Duration(milliseconds: currentMilliseconds.toInt()),
-                                    duration: widget.duration,
-                                    color: AppColors.accentCyan(context),
-                                    playheadColor: AppColors.textPrimary(context),
-                                    isLoopEnabled: widget.isLoopEnabled,
-                                    loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
-                                    loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
-                                    zoomLevel: _interactionController.zoomLevel,
-                                    scrollOffset: _interactionController.scrollOffset,
+                          // Waveform + Time Labels — only these rebuild at 60fps
+                          ValueListenableBuilder<Duration>(
+                            valueListenable: _visualPositionNotifier,
+                            builder: (context, visualPosition, _) {
+                              final double currentMilliseconds = _interactionController.dragPosition?.inMilliseconds.toDouble() ?? visualPosition.inMilliseconds.toDouble();
+                              
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.faderTrack(context).withOpacity(0.8),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: AppColors.border(context).withOpacity(0.5)),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(5),
+                                      child: SizedBox(
+                                        height: height,
+                                        width: width - 32, 
+                                        child: CustomPaint(
+                                          painter: WaveformPainter(
+                                            waveformData: widget.waveformData,
+                                            position: Duration(milliseconds: currentMilliseconds.toInt()),
+                                            duration: widget.duration,
+                                            color: AppColors.accentCyan(context),
+                                            playheadColor: AppColors.textPrimary(context),
+                                            isLoopEnabled: widget.isLoopEnabled,
+                                            loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
+                                            loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
+                                            zoomLevel: _interactionController.zoomLevel,
+                                            scrollOffset: _interactionController.scrollOffset,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          
-                          // Time Labels moved inside the bezel
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  _formatDuration(Duration(milliseconds: currentMilliseconds.toInt())),
-                                  style: TextStyle(
-                                    fontSize: 11, 
-                                    color: AppColors.textPrimary(context).withOpacity(0.8), 
-                                    fontWeight: FontWeight.w600,
-                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                  
+                                  // Time Labels
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          _formatDuration(Duration(milliseconds: currentMilliseconds.toInt())),
+                                          style: TextStyle(
+                                            fontSize: 11, 
+                                            color: AppColors.textPrimary(context).withOpacity(0.8), 
+                                            fontWeight: FontWeight.w600,
+                                            fontFeatures: const [FontFeature.tabularFigures()],
+                                          ),
+                                        ),
+                                        Text(
+                                          _formatDuration(widget.duration),
+                                          style: TextStyle(
+                                            fontSize: 11, 
+                                            color: AppColors.textPrimary(context).withOpacity(0.5), 
+                                            fontWeight: FontWeight.w600,
+                                            fontFeatures: const [FontFeature.tabularFigures()],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  _formatDuration(widget.duration),
-                                  style: TextStyle(
-                                    fontSize: 11, 
-                                    color: AppColors.textPrimary(context).withOpacity(0.5), 
-                                    fontWeight: FontWeight.w600,
-                                    fontFeatures: const [FontFeature.tabularFigures()],
-                                  ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              );
+                            },
                           ),
                         ],
                       ),

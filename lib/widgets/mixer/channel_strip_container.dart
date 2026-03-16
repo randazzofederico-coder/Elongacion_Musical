@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:elongacion_musical/constants/app_colors.dart';
 
@@ -36,7 +37,7 @@ class ChannelStripContainer extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
+        boxShadow: kIsWeb ? null : [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
             blurRadius: 10,
@@ -51,6 +52,7 @@ class ChannelStripContainer extends StatelessWidget {
       ),
       child: ClipRRect( 
         borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.hardEdge, // Cheaper than default antiAlias
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -67,6 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         label: 'MASTER',
                         value: mixer.masterVolume,
                         onChanged: (val) => mixer.setMasterVolume(val),
+                        onChangeEnd: (val) => mixer.commitMasterVolume(),
                         isMuted: mixer.isMasterMuted,
                         onMuteToggle: mixer.toggleMasterMute,
                         isSolo: mixer.isMasterSolo,
@@ -260,6 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       required String label,
       required double value,
       required Function(double) onChanged,
+      Function(double)? onChangeEnd,
       required bool isMuted,
       required VoidCallback onMuteToggle,
       required bool isSolo,
@@ -273,6 +275,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               KnobControl(
                   value: value,
                   onChanged: onChanged,
+                  onChangeEnd: onChangeEnd,
                   min: 0,
                   max: 1,
                   label: label,

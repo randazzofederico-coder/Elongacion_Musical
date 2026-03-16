@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:elongacion_musical/constants/app_colors.dart';
 import 'package:elongacion_musical/models/track_model.dart';
@@ -9,6 +10,7 @@ class TrackControls extends StatelessWidget {
   final ValueChanged<double> onVolumeChanged;
   final ValueChanged<double> onVolumeChangeEnd;
   final ValueChanged<double> onPanChanged;
+  final ValueChanged<double>? onPanChangeEnd;
   final VoidCallback onMuteToggle;
   final VoidCallback onSoloToggle;
   final bool useKnobForVolume;
@@ -20,6 +22,7 @@ class TrackControls extends StatelessWidget {
     required this.onVolumeChanged,
     required this.onVolumeChangeEnd,
     required this.onPanChanged,
+    this.onPanChangeEnd,
     required this.onMuteToggle,
     required this.onSoloToggle,
     required this.useKnobForVolume,
@@ -55,6 +58,7 @@ class TrackControls extends StatelessWidget {
               KnobControl(
                 value: track.pan,
                 onChanged: onPanChanged,
+                onChangeEnd: onPanChangeEnd,
                 label: "PAN",
                 min: -1.0,
                 max: 1.0,
@@ -96,8 +100,7 @@ class TrackControls extends StatelessWidget {
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      child: Container(
         width: 34, 
         height: 24, 
         decoration: BoxDecoration(
@@ -107,14 +110,14 @@ class TrackControls extends StatelessWidget {
             color: isActive ? activeColor.withOpacity(0.8) : AppColors.border(context),
             width: 1,
           ),
-          boxShadow: isActive
+          boxShadow: kIsWeb ? null : (isActive
               ? [
                   BoxShadow(color: activeColor.withOpacity(0.6), blurRadius: 8, spreadRadius: 1),
                   const BoxShadow(color: Colors.white24, offset: Offset(0, 1), blurRadius: 1), 
                 ]
               : [
                   const BoxShadow(color: Colors.black12, offset: Offset(0, 2), blurRadius: 2),
-                ],
+                ]),
         ),
         alignment: Alignment.center,
         child: Text(
@@ -123,7 +126,7 @@ class TrackControls extends StatelessWidget {
             color: isActive ? Colors.white : AppColors.textPrimary(context).withOpacity(0.7), 
             fontWeight: FontWeight.w900, 
             fontSize: 12,
-            shadows: isActive ? [Shadow(color: Colors.white.withOpacity(0.5), blurRadius: 4)] : [],
+            shadows: kIsWeb ? null : (isActive ? [Shadow(color: Colors.white.withOpacity(0.5), blurRadius: 4)] : []),
           )
         ),
       ),

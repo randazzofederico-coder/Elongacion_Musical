@@ -34,46 +34,58 @@ class KnobControl extends StatefulWidget {
 
 class _KnobControlState extends State<KnobControl> {
   static const double _maxAngle = 2.35; // ~135 degrees from center
+  
+  // Local drag state — decouples visual from TrackModel rebuild cascade
+  double? _dragValue;
+  bool _isDragging = false;
+
+  double get _effectiveValue => _isDragging ? (_dragValue ?? widget.value) : widget.value;
 
   void _handlePanUpdate(DragUpdateDetails details) {
-    double sensitivity = 0.005 * (widget.max - widget.min); 
+    // Increased sensitivity (x3) for better Desktop/Windows UX
+    double sensitivity = 0.015 * (widget.max - widget.min); 
     if (sensitivity == 0) sensitivity = 0.01;
     
-    double delta = -details.delta.dy * sensitivity;
-    double newValue = (widget.value + delta).clamp(widget.min, widget.max);
+    double delta = (details.delta.dx - details.delta.dy) * sensitivity;
+    double currentVal = _isDragging ? (_dragValue ?? widget.value) : widget.value;
+    double newValue = (currentVal + delta).clamp(widget.min, widget.max);
     
-    if (newValue != widget.value) {
-       widget.onChanged(newValue);
-    }
+    _dragValue = newValue;
+    _isDragging = true;
+    setState(() {}); // Instant local visual update
+    widget.onChanged(newValue); // Update audio engine
   }
 
   void _handlePanEnd(DragEndDetails details) {
+    final finalVal = _dragValue ?? widget.value;
+    _isDragging = false;
+    _dragValue = null;
     if (widget.onChangeEnd != null) {
-      widget.onChangeEnd!(widget.value);
+      widget.onChangeEnd!(finalVal);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final effectiveVal = _effectiveValue;
     double range = widget.max - widget.min;
     double angle = 0.0;
     
     if (range > 0) {
       if (widget.zeroAtCenter) {
-        // -1 to 1 maps to -_maxAngle to +_maxAngle
-        double normalized = (widget.value - widget.min) / range; // 0..1
-        normalized = (normalized * 2) - 1; // -1..1
+        double normalized = (effectiveVal - widget.min) / range;
+        normalized = (normalized * 2) - 1;
         angle = normalized * _maxAngle;
       } else {
-        // 0 to 1 maps to -_maxAngle to +_maxAngle (starts at bottom left)
-        double normalized = (widget.value - widget.min) / range; // 0..1
+        double normalized = (effectiveVal - widget.min) / range;
         angle = -_maxAngle + (normalized * (_maxAngle * 2));
       }
     }
 
     return GestureDetector(
-      onVerticalDragUpdate: _handlePanUpdate,
-      onVerticalDragEnd: _handlePanEnd,
+      behavior: HitTestBehavior.opaque,
+      onPanUpdate: _handlePanUpdate,
+      onPanEnd: _handlePanEnd,
       onDoubleTap: () {
         double resetValue = widget.zeroAtCenter ? (widget.min + widget.max) / 2 : widget.min;
         widget.onChanged(resetValue);
@@ -98,7 +110,7 @@ class _KnobControlState extends State<KnobControl> {
               textSecondaryColor: AppColors.textSecondary(context),
             ),
           ),
-          SizedBox(height: widget.size * 0.15), // Scale spacing with knob
+          SizedBox(height: widget.size * 0.15),
           Text(
             widget.label, 
             style: TextStyle(

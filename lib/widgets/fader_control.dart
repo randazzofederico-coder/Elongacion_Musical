@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:elongacion_musical/constants/app_colors.dart';
 
@@ -21,36 +22,29 @@ class FaderControl extends StatefulWidget {
 }
 
 class _FaderControlState extends State<FaderControl> {
+  // Local drag state — decouples visual from TrackModel rebuild cascade
+  double? _dragVolume;
+  bool _isDragging = false;
+  double? _cachedHeight;
+
   // Mapping Constants
   // We map normalized UI position (0.0 bottom to 1.0 top) to Amplitude.
   // Goal: 0.75 position = 0dB (Amplitude 1.0)
   //       1.00 position = +6dB (Amplitude ~2.0)
   
-  // Using a piecewise approximation for a good feel:
-  // Segment 1 (0.0 to 0.75): Exponential rise from 0 to 1.0
-  // Segment 2 (0.75 to 1.0): Linear rise from 1.0 to 2.0 (approx +6dB)
-  
   double _amplitudeToPosition(double amp) {
     if (amp <= 1.0) {
-      // Inverse of pos^2 * k? 
-      // Let's use simple: pos = 0.75 * sqrt(amp)
-      // Check: amp=1 -> pos=0.75. amp=0 -> pos=0. 
-      // amp=0.25 (-12dB) -> pos=0.375.
       return 0.75 * sqrt(max(0, amp));
     } else {
-      // Linear interpolation from 1.0 -> 2.0 mapped to 0.75 -> 1.0
-      // slope = (1.0 - 0.75) / (2.0 - 1.0) = 0.25
       return 0.75 + (amp - 1.0) * 0.25;
     }
   }
 
   double _positionToAmplitude(double pos) {
     if (pos <= 0.75) {
-      // amp = (pos / 0.75)^2
       final norm = pos / 0.75;
       return norm * norm;
     } else {
-      // amp = 1.0 + (pos - 0.75) / 0.25
       return 1.0 + (pos - 0.75) * 4.0;
     }
   }
@@ -61,13 +55,28 @@ class _FaderControlState extends State<FaderControl> {
     return "${db > 0 ? '+' : ''}${db.toStringAsFixed(1)}";
   }
 
+  double get _effectiveVolume => _isDragging ? (_dragVolume ?? widget.volume) : widget.volume;
+
+  void _handleDragStart(DragStartDetails details) {
+    _isDragging = true;
+    _dragVolume = widget.volume;
+  }
+
   void _handleDrag(double dy, double height) {
-    // dy is from top, so we invert
     double localY = (height - dy).clamp(0.0, height);
     double pos = localY / height;
-    
     double newAmp = _positionToAmplitude(pos);
-    widget.onChanged(newAmp);
+    
+    _dragVolume = newAmp;
+    setState(() {}); // Instant local visual update — no TrackModel cascade
+    widget.onChanged(newAmp); // Update audio engine
+  }
+
+  void _handleDragEnd() {
+    final finalVol = _dragVolume ?? widget.volume;
+    _isDragging = false;
+    _dragVolume = null;
+    widget.onChangeEnd(finalVol);
   }
 
   void _showValueDialog(BuildContext context) {
@@ -75,7 +84,7 @@ class _FaderControlState extends State<FaderControl> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceHighlight(context), // Warmer dialog
+        backgroundColor: AppColors.surfaceHighlight(context),
         title: Text("Volume (dB)", style: TextStyle(color: AppColors.textPrimary(context))),
         content: TextField(
           controller: controller,
@@ -98,8 +107,6 @@ class _FaderControlState extends State<FaderControl> {
             onPressed: () {
               final val = double.tryParse(controller.text);
               if (val != null) {
-                // Convert dB to Amp
-                // V = 10 ^ (dB/20)
                 final amp = pow(10, val / 20).toDouble();
                 widget.onChanged(amp);
                 widget.onChangeEnd(amp);
@@ -115,10 +122,11 @@ class _FaderControlState extends State<FaderControl> {
 
   @override
   Widget build(BuildContext context) {
-    final double position = _amplitudeToPosition(widget.volume);
-    final String dbLabel = _amplitudeToDbString(widget.volume);
+    final double effectiveVol = _effectiveVolume;
+    final double position = _amplitudeToPosition(effectiveVol);
+    final String dbLabel = _amplitudeToDbString(effectiveVol);
     final effectiveColor = widget.color ?? AppColors.accentAmber(context);
-    final isDark = AppColors.isDark(context); // Get theme mode
+    final isDark = AppColors.isDark(context);
 
     return Column(
       children: [
@@ -139,7 +147,7 @@ class _FaderControlState extends State<FaderControl> {
                 color: effectiveColor, 
                 fontSize: 10, 
                 fontWeight: FontWeight.w800,
-                fontFamily: 'monospace', // Studio console feel
+                fontFamily: 'monospace',
               ),
             ),
           ),
@@ -151,21 +159,19 @@ class _FaderControlState extends State<FaderControl> {
             builder: (context, constraints) {
               final h = constraints.maxHeight;
               final w = constraints.maxWidth;
+              _cachedHeight = h;
               
-              // Thumb Y position
               return GestureDetector(
+                onVerticalDragStart: _handleDragStart,
                 onVerticalDragUpdate: (details) {
                   _handleDrag(details.localPosition.dy, h);
                 },
-                onVerticalDragEnd: (_) {
-                  widget.onChangeEnd(widget.volume);
-                },
+                onVerticalDragEnd: (_) => _handleDragEnd(),
                 onTapDown: (details) {
                    _handleDrag(details.localPosition.dy, h);
-                   widget.onChangeEnd(widget.volume); // Immediate commit on tap
+                   widget.onChangeEnd(widget.volume);
                 },
                 onDoubleTap: () {
-                  // Reset to 0dB (Amplitude 1.0)
                   widget.onChanged(1.0);
                   widget.onChangeEnd(1.0);
                 },
@@ -179,7 +185,7 @@ class _FaderControlState extends State<FaderControl> {
                     textPrimaryColor: AppColors.textPrimary(context),
                     trackBgColor: AppColors.faderTrack(context),
                     slitColor: isDark ? Colors.black87 : const Color(0xFF2A1C16),
-                    isDark: isDark, // Pass boolean
+                    isDark: isDark,
                   ),
                 ),
               );
@@ -270,28 +276,35 @@ class _FaderPainter extends CustomPainter {
       height: 48, // Taller
     );
     
-    // Beautiful soft drop shadow
-    final shadowPath = Path()..addRRect(RRect.fromRectAndRadius(thumbRect, const Radius.circular(4)));
-    canvas.drawShadow(shadowPath.shift(const Offset(0, 6)), Colors.black.withOpacity(0.3), 12, true);
-    canvas.drawShadow(shadowPath.shift(const Offset(0, 2)), Colors.black.withOpacity(0.15), 4, true);
+    // Beautiful soft drop shadow (native only)
+    if (!kIsWeb) {
+      final shadowPath = Path()..addRRect(RRect.fromRectAndRadius(thumbRect, const Radius.circular(4)));
+      canvas.drawShadow(shadowPath.shift(const Offset(0, 6)), Colors.black.withOpacity(0.3), 12, true);
+      canvas.drawShadow(shadowPath.shift(const Offset(0, 2)), Colors.black.withOpacity(0.15), 4, true);
+    }
 
-    // Thumb Body Gradient (Warm Steel vs Dark Steel)
-    final List<Color> gradientColors = isDark 
-        ? [const Color(0xFF4A443F), const Color(0xFF322C28), const Color(0xFF241F1C)] // Dark steel
-        : [const Color(0xFFFDFBF7), const Color(0xFFE8E0D5), const Color(0xFFD5CABB)]; // Light steel
+    // Thumb Body
+    final thumbRRect = RRect.fromRectAndRadius(thumbRect, const Radius.circular(4));
+    if (kIsWeb) {
+      // Flat color on web — avoids expensive createShader() per frame
+      final paintThumb = Paint()
+        ..color = isDark ? const Color(0xFF3A342F) : const Color(0xFFE8E0D5);
+      canvas.drawRRect(thumbRRect, paintThumb);
+    } else {
+      // Gradient on native (Warm Steel vs Dark Steel)
+      final List<Color> gradientColors = isDark 
+          ? [const Color(0xFF4A443F), const Color(0xFF322C28), const Color(0xFF241F1C)]
+          : [const Color(0xFFFDFBF7), const Color(0xFFE8E0D5), const Color(0xFFD5CABB)];
 
-    final paintThumb = Paint()
-      ..shader = LinearGradient(
-        colors: gradientColors, 
-        stops: const [0.0, 0.4, 1.0],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(thumbRect);
-
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(thumbRect, const Radius.circular(4)),
-      paintThumb,
-    );
+      final paintThumb = Paint()
+        ..shader = LinearGradient(
+          colors: gradientColors, 
+          stops: const [0.0, 0.4, 1.0],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ).createShader(thumbRect);
+      canvas.drawRRect(thumbRRect, paintThumb);
+    }
     
     // Inner bevel highlight
     final paintHighlight = Paint()
@@ -303,7 +316,7 @@ class _FaderPainter extends CustomPainter {
       paintHighlight,
     );
     
-    // 4. Glowing Indicator Line
+    // 4. Indicator Line
     final centerLineRect = Rect.fromCenter(
       center: Offset(centerX, thumbY),
       width: 18,
@@ -314,13 +327,17 @@ class _FaderPainter extends CustomPainter {
     final paintIndicatorBg = Paint()..color = isDark ? Colors.black : const Color(0xFF2A1C16);
     canvas.drawRect(centerLineRect, paintIndicatorBg);
 
-    // Glow Effect
-    final paintGlow = Paint()
-      ..color = color
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    canvas.drawRect(centerLineRect.deflate(0.5), paintGlow);
+    // Glow Effect — MaskFilter.blur is expensive on web
+    if (!kIsWeb) {
+      final paintGlow = Paint()
+        ..color = color
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+      canvas.drawRect(centerLineRect.deflate(0.5), paintGlow);
+    } else {
+      canvas.drawRect(centerLineRect.deflate(0.5), Paint()..color = color);
+    }
 
-    // Bright Center Let
+    // Bright Center Line
     final paintIndicatorPulse = Paint()..color = Colors.white.withOpacity(0.8);
     canvas.drawRect(centerLineRect.deflate(1), paintIndicatorPulse);
   }

@@ -1,4 +1,5 @@
 import 'package:elongacion_musical/models/catalog_model.dart';
+import 'package:elongacion_musical/models/track_model.dart';
 import 'package:elongacion_musical/constants/app_colors.dart';
 import 'package:elongacion_musical/providers/mixer_provider.dart';
 import 'package:elongacion_musical/widgets/studio_header.dart';
@@ -44,7 +45,9 @@ class _MixerScreenState extends State<MixerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mixer = context.watch<MixerProvider>();
+    // Only rebuild top-level on isLoading changes — child widgets have their own listeners
+    final isLoading = context.select<MixerProvider, bool>((m) => m.isLoading);
+    final mixer = context.read<MixerProvider>();
 
     return Scaffold(
       backgroundColor: AppColors.background(context),
@@ -63,7 +66,7 @@ class _MixerScreenState extends State<MixerScreen> {
              ),
             ),
             // Rest of the UI or Loading Spinner
-            if (mixer.isLoading)
+            if (isLoading)
               Expanded(
                 child: Center(
                   child: Column(
@@ -80,81 +83,99 @@ class _MixerScreenState extends State<MixerScreen> {
               // Top: Console Area (Tracks + Master)
               Expanded(
                 flex: 1,
-                child: mixer.tracks.isEmpty
-                    ? const Center(child: Text("No tracks loaded"))
-                    : LayoutBuilder(
+                child: Selector<MixerProvider, ({List<TrackModel> tracks, bool showWaveforms})>(
+                  selector: (_, m) => (tracks: m.tracks, showWaveforms: m.showWaveforms),
+                  builder: (context, state, child) {
+                    if (state.tracks.isEmpty) {
+                      return const Center(child: Text("No tracks loaded"));
+                    }
+                    return LayoutBuilder(
                         builder: (context, constraints) {
                           final width = constraints.maxWidth;
-                          final bool showWaveform = (width > 600) && mixer.showWaveforms;
+                          final bool showWaveform = (width > 600) && state.showWaveforms;
 
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12.0), // Outer padding (12) + strip margin (4) = 16px
+                            padding: const EdgeInsets.symmetric(horizontal: 12.0),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 // TRACKS
                                 Expanded(
-                                  flex: mixer.tracks.length > 0 ? mixer.tracks.length : 1,
-                                  child: TrackListSection(
-                                    showWaveform: showWaveform,
-                                    itemWidth: double.infinity, // Let Expanded enforce width
-                                    useKnobForVolume: false, 
+                                  flex: state.tracks.length > 0 ? state.tracks.length : 1,
+                                  child: RepaintBoundary(
+                                    child: TrackListSection(
+                                      showWaveform: showWaveform,
+                                      itemWidth: double.infinity,
+                                      useKnobForVolume: false, 
+                                    ),
                                   ),
                                 ),
                                 
                                 // MASTER STRIP
                                 Expanded(
                                   flex: 1,
-                                  child: MasterSection(
-                                    showWaveform: showWaveform,
-                                    width: double.infinity, // Let Expanded enforce width
+                                  child: RepaintBoundary(
+                                    child: MasterSection(
+                                      showWaveform: showWaveform,
+                                      width: double.infinity,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           );
                         }
-                      ),
+                      );
+                  },
+                ),
               ),
               
-              const SizedBox(height: 4), // Subtle margin between Stems and Ruler
+              const SizedBox(height: 4),
 
-            // Middle: Waveform Area (Fixed height, full width)
-            StreamBuilder<Duration?>(
-                stream: mixer.durationStream,
-                initialData: mixer.duration,
-                builder: (context, durationSnap) {
-                  final duration = durationSnap.data ?? Duration.zero;
-                  return StreamBuilder<Duration>(
-                    stream: mixer.positionStream,
-                    builder: (context, posSnap) {
-                       final position = posSnap.data ?? Duration.zero;
-                       
-                       return WaveformSeekBar(
-                          duration: duration,
-                          position: position,
-                          waveformData: mixer.masterWaveformData,
-                          isLoopEnabled: mixer.isLooping,
-                          loopStart: mixer.loopStart,
-                          loopEnd: mixer.loopEnd,
-                          bpm: mixer.currentExercise?.bpm,
-                          timeSignatureNumerator: mixer.currentExercise?.timeSignatureNumerator,
-                          preWaitMeasures: mixer.currentExercise?.preWaitMeasures ?? 0,
-                          countInMeasures: mixer.currentExercise?.countInMeasures ?? 0,
-                          onSeek: (pos) => mixer.seek(pos),
-                          onLoopRangeChanged: (start, end) => mixer.setLoopRange(start, end),
-                          onLoopRangeChangeEnd: (start, end) {
-                             mixer.setLoopRange(start, end);
-                             mixer.commitLoopRange();
-                          },
-                       );
-                    }
+            // Middle: Waveform Area — own Selector, only rebuilds on relevant changes
+            RepaintBoundary(
+              child: Selector<MixerProvider, ({
+                Duration position, Duration? duration, List<List<double>> waveformData,
+                bool isPlaying, bool isLooping, Duration loopStart, Duration loopEnd,
+                int? bpm, int? tsNum, int preWait, int countIn,
+              })>(
+                selector: (_, m) => (
+                  position: m.currentPosition, duration: m.duration,
+                  waveformData: m.masterWaveformData,
+                  isPlaying: m.isPlaying,
+                  isLooping: m.isLooping, loopStart: m.loopStart, loopEnd: m.loopEnd,
+                  bpm: m.currentExercise?.bpm, tsNum: m.currentExercise?.timeSignatureNumerator,
+                  preWait: m.currentExercise?.preWaitMeasures ?? 0,
+                  countIn: m.currentExercise?.countInMeasures ?? 0,
+                ),
+                builder: (context, s, child) {
+                  final mixer = context.read<MixerProvider>();
+                  final duration = s.duration ?? Duration.zero;
+
+                  return WaveformSeekBar(
+                     duration: duration,
+                     position: s.position,
+                     waveformData: s.waveformData,
+                     isLoopEnabled: s.isLooping,
+                     loopStart: s.loopStart,
+                     loopEnd: s.loopEnd,
+                     bpm: s.bpm,
+                     timeSignatureNumerator: s.tsNum,
+                     preWaitMeasures: s.preWait,
+                     countInMeasures: s.countIn,
+                     onSeek: (pos) => mixer.seek(pos),
+                     onLoopRangeChanged: (start, end) => mixer.setLoopRange(start, end),
+                     onLoopRangeChangeEnd: (start, end) {
+                        mixer.setLoopRange(start, end);
+                        mixer.commitLoopRange();
+                     },
                   );
-                }
+                },
               ),
+            ),
 
               // Bottom: Transport Controls
-              const TransportSection(),
+              const RepaintBoundary(child: TransportSection()),
             ],
           ],
         ),

@@ -11,43 +11,36 @@ class MasterSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mixer = context.watch<MixerProvider>();
-    
-    return ListenableBuilder(
-      listenable: Listenable.merge(mixer.tracks),
-      builder: (context, child) {
-        return StreamBuilder<Duration>(
-          stream: mixer.positionStream,
-          builder: (context, snapshot) {
-            final pos = snapshot.data ?? Duration.zero;
-            
-            return StreamBuilder<Duration?>(
-              stream: mixer.durationStream,
-              initialData: mixer.duration,
-              builder: (context, durationSnap) {
-                 final total = durationSnap.data ?? Duration.zero;
-                 double progress = 0.0;
-                 if (total.inMilliseconds > 0) {
-                    progress = pos.inMilliseconds / total.inMilliseconds;
-                 }
-                 
-                 return MasterStrip(
-                   waveformData: mixer.masterWaveformData,
-                   volume: mixer.masterVolume,
-                   onVolumeChanged: (vol) => mixer.setMasterVolume(vol),
-                   onVolumeChangeEnd: (_) {}, 
-                   progress: progress,
-                   metronomeVol34: mixer.metronomeVol34,
-                   metronomeVol68: mixer.metronomeVol68,
-                   onMetronomeChanged: (vol34, vol68) => mixer.setMetronomeVolume(vol34, vol68),
-                   showWaveform: showWaveform,
-                   width: width,
-                 );
-              }
-            );
-          }
+    return Selector<MixerProvider, ({
+      double masterVolume,
+      double metronomeVol34,
+      double metronomeVol68,
+      List<List<double>> waveformData,
+    })>(
+      selector: (_, m) => (
+        masterVolume: m.masterVolume,
+        metronomeVol34: m.metronomeVol34,
+        metronomeVol68: m.metronomeVol68,
+        waveformData: m.masterWaveformData,
+      ),
+      builder: (context, state, child) {
+        final mixer = context.read<MixerProvider>();
+        return MasterStrip(
+          waveformData: state.waveformData,
+          volume: state.masterVolume,
+          onVolumeChanged: (vol) => mixer.setMasterVolumeDirect(vol),
+          onVolumeChangeEnd: (vol) {
+            mixer.setMasterVolume(vol);
+            mixer.commitMasterVolume();
+          },
+          progress: 0.0,
+          metronomeVol34: state.metronomeVol34,
+          metronomeVol68: state.metronomeVol68,
+          onMetronomeChanged: (vol34, vol68) => mixer.setMetronomeVolume(vol34, vol68),
+          showWaveform: showWaveform,
+          width: width,
         );
-      }
+      },
     );
   }
 }
