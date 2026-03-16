@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 
 class WaveformInteractionController extends ChangeNotifier {
   Duration duration;
@@ -31,6 +32,7 @@ class WaveformInteractionController extends ChangeNotifier {
   bool _isInteractingWithRuler = false;
   int _activePointers = 0;
   bool _sessionWasZooming = false;
+  int _activeMouseButton = 0;
 
   WaveformInteractionController({
     required this.duration,
@@ -86,6 +88,10 @@ class WaveformInteractionController extends ChangeNotifier {
   // --- Pointer Handlers ---
   void handlePointerDown(PointerDownEvent event) {
      _activePointers++;
+     if (_activePointers == 1) {
+         _activeMouseButton = event.buttons;
+     }
+
      if (_activePointers >= 2) {
          _sessionWasZooming = true;
          if (dragPosition != null || isDraggingLoopStart || isDraggingLoopEnd) {
@@ -99,10 +105,52 @@ class WaveformInteractionController extends ChangeNotifier {
      }
   }
 
+  void handlePointerMove(PointerMoveEvent event, double width) {
+     if (_activeMouseButton == kSecondaryMouseButton || _activeMouseButton == kMiddleMouseButton) {
+        double maxScroll = (width * zoomLevel) - width;
+        scrollOffset -= event.delta.dx;
+        scrollOffset = scrollOffset.clamp(0.0, maxScroll >= 0 ? maxScroll : 0.0);
+        notifyListeners();
+     }
+  }
+
+  void handlePointerSignal(PointerSignalEvent event, double width) {
+     if (event is PointerScrollEvent) {
+        final keyboard = HardwareKeyboard.instance;
+        bool isZoomModifiers = keyboard.isControlPressed || keyboard.isAltPressed || keyboard.isShiftPressed;
+                               
+        if (isZoomModifiers) {
+           double zoomDelta = -event.scrollDelta.dy * 0.005; 
+           double newZoom = (zoomLevel + zoomDelta).clamp(1.0, 50.0);
+           
+           double pointerMs = _getMsFromLocalX(event.localPosition.dx, width);
+           
+           zoomLevel = newZoom;
+           if (totalMs > 0) {
+               double newScrollOffset = (pointerMs / totalMs) * (width * newZoom) - event.localPosition.dx;
+               double maxScroll = (width * newZoom) - width;
+               scrollOffset = newScrollOffset.clamp(0.0, maxScroll >= 0 ? maxScroll : 0.0);
+           }
+           notifyListeners();
+        } else {
+           double maxScroll = (width * zoomLevel) - width;
+           double panDelta = event.scrollDelta.dx != 0 ? event.scrollDelta.dx : event.scrollDelta.dy;
+           if (keyboard.isShiftPressed) {
+               panDelta = event.scrollDelta.dy != 0 ? event.scrollDelta.dy : panDelta;
+           }
+           
+           scrollOffset += panDelta;
+           scrollOffset = scrollOffset.clamp(0.0, maxScroll >= 0 ? maxScroll : 0.0);
+           notifyListeners();
+        }
+     }
+  }
+
   void handlePointerUp(PointerUpEvent event) {
      _activePointers--;
      if (_activePointers <= 0) {
          _activePointers = 0;
+         _activeMouseButton = 0;
          Future.microtask(() {
              if (_activePointers == 0) {
                  _sessionWasZooming = false;
@@ -115,12 +163,24 @@ class WaveformInteractionController extends ChangeNotifier {
      _activePointers--;
      if (_activePointers <= 0) {
          _activePointers = 0;
+         _activeMouseButton = 0;
          Future.microtask(() {
              if (_activePointers == 0) {
                  _sessionWasZooming = false;
              }
          });
      }
+  }
+
+  void setScrollOffsetFromRatio(double ratio, double width) {
+     if (totalMs <= 0) return;
+     double virtualWidth = width * zoomLevel;
+     double maxScroll = virtualWidth - width;
+     
+     if (maxScroll <= 0) return;
+     
+     scrollOffset = (ratio * virtualWidth).clamp(0.0, maxScroll);
+     notifyListeners();
   }
 
   // --- Scale / Zoom / Pan Handlers ---

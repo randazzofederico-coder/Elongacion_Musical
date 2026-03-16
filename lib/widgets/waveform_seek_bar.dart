@@ -7,6 +7,7 @@ import 'package:elongacion_musical/constants/app_colors.dart';
 import 'package:elongacion_musical/widgets/waveform/waveform_painter.dart';
 import 'package:elongacion_musical/widgets/waveform/loop_ruler.dart';
 import 'package:elongacion_musical/widgets/waveform/waveform_interaction_controller.dart';
+import 'package:elongacion_musical/widgets/waveform/waveform_overview_bar.dart';
 
 class WaveformSeekBar extends StatefulWidget {
   final Duration duration;
@@ -158,131 +159,154 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> with SingleTickerProv
           listenable: _interactionController,
           builder: (context, child) {
             
-            return Listener(
-              onPointerDown: _interactionController.handlePointerDown,
-              onPointerUp: _interactionController.handlePointerUp,
-              onPointerCancel: _interactionController.handlePointerCancel,
-              child: GestureDetector(
-                onScaleStart: (details) => _interactionController.handleScaleStart(details, width),
-                onScaleUpdate: (details) => _interactionController.handleScaleUpdate(details, width),
-                onScaleEnd: _interactionController.handleScaleEnd,
-                onTapUp: (details) => _interactionController.handleTap(details, width),
-                child: Column(
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface(context),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: kIsWeb ? null : [
-                           BoxShadow(
-                             color: Colors.black.withOpacity(0.08),
-                             blurRadius: 10,
-                             offset: const Offset(0, 4),
-                           ),
-                           BoxShadow(
-                             color: AppColors.surfaceHighlight(context).withOpacity(0.3),
-                             offset: const Offset(0, 1),
-                             blurRadius: 0,
-                           )
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.bpm != null && widget.bpm! > 0 && widget.timeSignatureNumerator != null && widget.timeSignatureNumerator! > 0)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 1.0),
-                              child: LoopRuler(
-                                width: width - 34,
-                                totalMs: totalMilliseconds,
-                                bpm: widget.bpm!,
-                                timeSignatureNumerator: widget.timeSignatureNumerator!,
-                                preWaitMeasures: widget.preWaitMeasures,
-                                countInMeasures: widget.countInMeasures,
-                                duration: widget.duration,
-                                loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
-                                loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
-                                isLoopEnabled: widget.isLoopEnabled,
-                                zoomLevel: _interactionController.zoomLevel,
-                                scrollOffset: _interactionController.scrollOffset,
-                              ),
-                            ),
-                            
-                          // Waveform + Time Labels — only these rebuild at 60fps
-                          ValueListenableBuilder<Duration>(
-                            valueListenable: _visualPositionNotifier,
-                            builder: (context, visualPosition, _) {
-                              final double currentMilliseconds = _interactionController.dragPosition?.inMilliseconds.toDouble() ?? visualPosition.inMilliseconds.toDouble();
-                              
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: AppColors.faderTrack(context).withOpacity(0.8),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: AppColors.border(context).withOpacity(0.5)),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(5),
-                                      child: SizedBox(
-                                        height: height,
-                                        width: width - 32, 
-                                        child: CustomPaint(
-                                          painter: WaveformPainter(
-                                            waveformData: widget.waveformData,
-                                            position: Duration(milliseconds: currentMilliseconds.toInt()),
-                                            duration: widget.duration,
-                                            color: AppColors.accentCyan(context),
-                                            playheadColor: AppColors.textPrimary(context),
-                                            isLoopEnabled: widget.isLoopEnabled,
-                                            loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
-                                            loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
-                                            zoomLevel: _interactionController.zoomLevel,
-                                            scrollOffset: _interactionController.scrollOffset,
-                                          ),
-                                        ),
+            final double innerWidth = width - 44; // 16 horizontal margin (x2) + 6 horizontal padding (x2)
+
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppColors.surface(context),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: kIsWeb ? null : [
+                   BoxShadow(
+                     color: Colors.black.withOpacity(0.08),
+                     blurRadius: 10,
+                     offset: const Offset(0, 4),
+                   ),
+                   BoxShadow(
+                     color: AppColors.surfaceHighlight(context).withOpacity(0.3),
+                     offset: const Offset(0, 1),
+                     blurRadius: 0,
+                   )
+                ],
+              ),
+              child: Listener(
+                onPointerDown: _interactionController.handlePointerDown,
+                onPointerMove: (event) => _interactionController.handlePointerMove(event, innerWidth),
+                onPointerUp: _interactionController.handlePointerUp,
+                onPointerCancel: _interactionController.handlePointerCancel,
+                onPointerSignal: (event) => _interactionController.handlePointerSignal(event, innerWidth),
+                child: GestureDetector(
+                  onScaleStart: (details) => _interactionController.handleScaleStart(details, innerWidth),
+                  onScaleUpdate: (details) => _interactionController.handleScaleUpdate(details, innerWidth),
+                  onScaleEnd: _interactionController.handleScaleEnd,
+                  onTapUp: (details) => _interactionController.handleTap(details, innerWidth),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.bpm != null && widget.bpm! > 0 && widget.timeSignatureNumerator != null && widget.timeSignatureNumerator! > 0)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 1.0),
+                          child: LoopRuler(
+                            width: innerWidth - 2, // 1.0 padding on each side
+                            totalMs: totalMilliseconds,
+                            bpm: widget.bpm!,
+                            timeSignatureNumerator: widget.timeSignatureNumerator!,
+                            preWaitMeasures: widget.preWaitMeasures,
+                            countInMeasures: widget.countInMeasures,
+                            duration: widget.duration,
+                            loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
+                            loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
+                            isLoopEnabled: widget.isLoopEnabled,
+                            zoomLevel: _interactionController.zoomLevel,
+                            scrollOffset: _interactionController.scrollOffset,
+                          ),
+                        ),
+                        
+                      // Waveform + Time Labels — only these rebuild at 60fps
+                      ValueListenableBuilder<Duration>(
+                        valueListenable: _visualPositionNotifier,
+                        builder: (context, visualPosition, _) {
+                          final double currentMilliseconds = _interactionController.dragPosition?.inMilliseconds.toDouble() ?? visualPosition.inMilliseconds.toDouble();
+                          
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.faderTrack(context).withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: AppColors.border(context).withOpacity(0.5)),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(5),
+                                  child: SizedBox(
+                                    height: height,
+                                    width: innerWidth, 
+                                    child: CustomPaint(
+                                      painter: WaveformPainter(
+                                        waveformData: widget.waveformData,
+                                        position: Duration(milliseconds: currentMilliseconds.toInt()),
+                                        duration: widget.duration,
+                                        color: AppColors.accentCyan(context),
+                                        playheadColor: AppColors.textPrimary(context),
+                                        isLoopEnabled: widget.isLoopEnabled,
+                                        loopStart: _interactionController.dragLoopStart ?? widget.loopStart,
+                                        loopEnd: _interactionController.dragLoopEnd ?? widget.loopEnd,
+                                        zoomLevel: _interactionController.zoomLevel,
+                                        scrollOffset: _interactionController.scrollOffset,
                                       ),
                                     ),
                                   ),
-                                  
-                                  // Time Labels
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          _formatDuration(Duration(milliseconds: currentMilliseconds.toInt())),
-                                          style: TextStyle(
-                                            fontSize: 11, 
-                                            color: AppColors.textPrimary(context).withOpacity(0.8), 
-                                            fontWeight: FontWeight.w600,
-                                            fontFeatures: const [FontFeature.tabularFigures()],
-                                          ),
-                                        ),
-                                        Text(
-                                          _formatDuration(widget.duration),
-                                          style: TextStyle(
-                                            fontSize: 11, 
-                                            color: AppColors.textPrimary(context).withOpacity(0.5), 
-                                            fontWeight: FontWeight.w600,
-                                            fontFeatures: const [FontFeature.tabularFigures()],
-                                          ),
-                                        ),
-                                      ],
+                                ),
+                              ),
+                              
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6.0),
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    WaveformOverviewBar(
+                                      width: innerWidth,
+                                      totalDuration: widget.duration,
+                                      position: Duration(milliseconds: currentMilliseconds.toInt()),
+                                      zoomLevel: _interactionController.zoomLevel,
+                                      scrollOffset: _interactionController.scrollOffset,
+                                      waveformData: widget.waveformData,
+                                      onPanRequested: (ratio) {
+                                         _interactionController.setScrollOffsetFromRatio(ratio, innerWidth);
+                                      },
                                     ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
+                                    // Time Labels superimposed
+                                    IgnorePointer(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              _formatDuration(Duration(milliseconds: currentMilliseconds.toInt())),
+                                              style: TextStyle(
+                                                fontSize: 11, 
+                                                color: AppColors.textPrimary(context), 
+                                                fontWeight: FontWeight.w600,
+                                                fontFeatures: const [FontFeature.tabularFigures()],
+                                                shadows: const [Shadow(color: Colors.black87, blurRadius: 3)],
+                                              ),
+                                            ),
+                                            Text(
+                                              _formatDuration(widget.duration),
+                                              style: TextStyle(
+                                                fontSize: 11, 
+                                                color: AppColors.textPrimary(context), 
+                                                fontWeight: FontWeight.w600,
+                                                fontFeatures: const [FontFeature.tabularFigures()],
+                                                shadows: const [Shadow(color: Colors.black87, blurRadius: 3)],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );

@@ -125,5 +125,12 @@ Waveform rendering during fader interaction uses cached paths and GPU-level tran
 | **Master waveform** | Weighted sum of all tracks' peak data, recomputed on commit. Same cached Path + `canvas.scale` for master gain. | O(tracks × points) on commit only |
 | **Live gain bridge** | `ValueNotifier<double>` owned by `TrackStrip`/`MasterStrip`. FaderControl writes, VerticalWaveform reads via `CustomPainter(repaint: notifier)`. | Zero widget rebuilds |
 | **Downsampling** | If waveform data has more points than available pixels, reduces using peak-per-bucket bucketing (e.g., 2000 → 400 vertices). | One-time on cache build |
-
 **Architecture:** `VerticalWaveform` is a `StatefulWidget` that caches `_ChannelPathInfo` (Path + centerX). The `_ScaledWaveformPainter` reads `gainNotifier?.value` live in `paint()` via a getter — when the notifier fires, only `paint()` re-executes with the new gain value, no widget rebuild occurs.
+
+## 7. PC/MOUSE INTERACTIONS
+To ensure a premium experience on Desktop (Windows/Web), where users may lack a trackpad, touch interactions are manually extended:
+- **`PointerSignalEvent` (Mouse Wheel):** Captured globally on the Waveform by `WaveformInteractionController`.
+  - **Pan:** Standard mouse wheel scroll translates to horizontal timeline panning. If `Shift` is held, vertical scrolling is also translated to horizontal panning.
+  - **Zoom:** Mouse wheel + `Control` (or `Cmd`, `Shift`, `Alt`) applies dynamic zoom-in/zoom-out around the exact pointer-hover location without dragging the playhead. (Multiple modifiers are allowed to bypass aggressive browser shortcuts like native Chrome page zoom).
+- **`PointerMoveEvent`:** Overridden to track `kSecondaryMouseButton` (Right Click) and `kMiddleMouseButton` (Scroll Wheel Click), allowing free-panning of the viewport just like a trackpad drag.
+- **Minimap (Waveform Overview Bar):** Always-visible miniature waveform beneath the main interaction area. It visualizes the entire audio track and highlights the active "Viewport" bounding box according to current Zoom and Pan. Enables instant macro-level navigation by tapping or dragging the highlight box. The time labels are superimposed on the minimap with dark text-shadows to ensure readability and maintain a compact vertical footprint.
